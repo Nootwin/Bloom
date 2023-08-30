@@ -1,0 +1,15 @@
+AsTypeMethodHandleDesc
+ClassDesc
+Constable
+ConstantDesc
+ConstantDescs
+ConstantUtils
+DirectMethodHandleDesc
+DirectMethodHandleDescImpl
+DynamicCallSiteDesc
+DynamicConstantDesc
+MethodHandleDesc
+MethodTypeDesc
+MethodTypeDescImpl
+PrimitiveClassDescImpl
+ReferenceClassDescImpl

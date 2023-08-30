@@ -1,0 +1,10 @@
+Cleaner
+Finalizer
+FinalizerHistogram
+FinalReference
+NativeReferenceQueue
+PhantomReference
+Reference
+ReferenceQueue
+SoftReference
+WeakReference
