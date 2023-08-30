@@ -74,7 +74,7 @@ public class caller {
 	}
 	
 	public static void main(String[] args) {
-		String file = fileReader.ReadFileToString("C:\\Users\\Nolan Murray\\eclipse-workspace\\crodot\\src\\main\\java\\crodot\\main.cr");
+		String file = fileReader.ReadFileToString("C:\\Users\\Nolan Murray\\git\\cro\\crodot\\src\\main\\java\\crodot\\main.cr");
 		System.out.println(file);
 		
 		Lexer clone = new Lexer();

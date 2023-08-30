@@ -2604,7 +2604,7 @@ public class CodeCreator {
 	}
 	
 	public void runClass(String filename) {
-		String cmd = "java -cp \"C:\\Users\\Nolan Murray\\eclipse-workspace\\crodot\" "  + filename;
+		String cmd = "java -cp \"C:\\Users\\Nolan Murray\\git\\cro\\crodot\" "  + filename;
 		try {
 
 			Process comm = Runtime.getRuntime().exec(cmd);
