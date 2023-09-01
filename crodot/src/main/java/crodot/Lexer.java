@@ -47,6 +47,9 @@ public class Lexer {
 				else if (i == '"') {
 					b = "STRING";
 				}
+				else if (i == '\'') {
+					b = "CHAR";
+				}
 				else if (i == ';') {
 					ts.add(new token("ENDOFLINE", ";"));
 				}
@@ -78,6 +81,9 @@ public class Lexer {
 					else if (i == '"') {
 						b = "STRING";
 					}
+					else if (i == '\'') {
+						b = "CHAR";
+					}
 					else if (!Character.isWhitespace(i)) {
 						a += i;
 						b = "SPECIAL";
@@ -104,6 +110,9 @@ public class Lexer {
 					}
 					else if (i == '"') {
 						b = "STRING";
+					}				
+					else if (i == '\'') {
+						b = "CHAR";
 					}
 					else if (!Character.isWhitespace(i)) {
 						a += i;
@@ -121,6 +130,17 @@ public class Lexer {
 					a = "";
 					b = "";
 				}	
+			}
+			else if (b == "CHAR") {
+				if (i !=  '\'') {
+					a += i;
+				}
+				else {
+					ts.add(new token("CHAR", a));
+					a = "";
+					b = "";
+				}	
+				
 			}
 			else if (b ==  "SPECIAL") {
 				if (a.equals("-") && Character.isDigit(i)) {
