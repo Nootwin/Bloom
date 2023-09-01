@@ -52,7 +52,7 @@ public class Generator {
 		case "VAR":
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			if (tree.GetNodeSize() > 0) {
-				create.evalE(tree.GetFirstNode());
+				create.evalE(tree.GetFirstNode(), create.getVar(tree.GetFirstNode().value).type);
 				create.storeVar(tree.value, tree);
 			}
 			else if (create.isClass(tree.value)) {
@@ -79,7 +79,7 @@ public class Generator {
 			else {
 				wanderingIf = create.accMain(unClass, unMethod, wanderingIf); 
 				if (tree.GetNodeSize() > 1) {
-					create.evalE(tree.GetNode(1));
+					create.evalE(tree.GetNode(1), create.strToByte(tree.value));
 					create.newVar(tree.GetFirstNode().value, tree.value, tree.Grab("GENERIC"));
 				}
 				else {

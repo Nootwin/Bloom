@@ -96,8 +96,11 @@ public class CrodotMethodVisitor{
 		mv.visitEnd();
 	}
 
-	public void insert(CrodotCode code, int SpacesBack) {
-		codes.add(codes.size()-SpacesBack, code);
+	public void insert(CrodotCode code, int space) {
+		codes.add(space+1, code);
+	}
+	public CrodotCode pop() {
+		return codes.removeLast();
 	}
 	
 	public void apply() {

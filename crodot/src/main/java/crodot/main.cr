@@ -12,11 +12,8 @@ class Barkion : Error {
 
 class Ethan <T> {
 	void sup()  {
-		int myDick = 3
-		doub m = 3.0
-		if 4 == myDick {
-			print("wowza")
-		}
+		Float x = 4.0
+		print(x)
 		LinkedList<Object> list = LinkedList<Object>()
 		list.add("meow")
 		print(list.get(0))
@@ -39,5 +36,5 @@ mouth.sup()
 mouth.supThree("bark")
 
 Mokey m = Mokey()
-m.piss(5)
+m.piss(6)
 
