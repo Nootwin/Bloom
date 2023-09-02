@@ -12,7 +12,7 @@ class Barkion : Error {
 
 class Ethan <T> {
 	void sup()  {
-		Object[] o = [2, 3, 4]
+		Object[][] o = [["meow"], ["bark"]]
 		
 
 	}

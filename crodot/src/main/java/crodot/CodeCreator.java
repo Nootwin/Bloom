@@ -606,6 +606,8 @@ public class CodeCreator {
 	}
 	
 	public String IfImport(String type) {
+		System.out.println(type);
+		System.out.println(results.Classes.containsKey(type));
 		if (results.Classes.containsKey(type)) {
 			return results.Classes.get(type).name;
 		}
@@ -6495,7 +6497,13 @@ public class CodeCreator {
 			break;
 		default:
 			valType = strToByte(temp.value.substring(0, temp.value.length()-slack-2));
-			mv.visitTypeInsn(Opcodes.ANEWARRAY,valType.substring(1, valType.length()-1));
+			if (valType.contains("[")) {
+				mv.visitTypeInsn(Opcodes.ANEWARRAY, valType);
+			}
+			else {
+				mv.visitTypeInsn(Opcodes.ANEWARRAY, valType.substring(1, valType.length()));
+			}
+			
 			enCapCode = Opcodes.AASTORE;
 			
 			System.out.println(valType + "KOKOI");
