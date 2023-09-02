@@ -70,28 +70,53 @@ public class CodeCreator {
 		}
 	}
 	public String[] checkMethodvStack(String Methodname, String Classname, int size) {
+		int[] priority = null;
+		int[] tempPrio;
+		boolean flag;
+		int indexOf;
 		MethodInfo info = results.Classes.get(Classname).methods.get(Methodname);
 		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
-		boolean flag;
 		if ((!Objects.isNull(info))) {
 			for (int i = 0; i < info.args.size(); i++) {
 				if (info.args.get(i).size() == stacks.size()) {
+					tempPrio = new int[size+1];
+					tempPrio[0] = i;
 					flag = true;
 					for (int j = 0; j < stacks.size(); j++) {
-						if (!stacks.get(j).contains(info.args.get(i).get(j))) {
+						if ((indexOf = stacks.get(j).indexOf(info.args.get(i).get(j))) != -1) {
+							tempPrio[j+1] = indexOf;
+						}
+						else {
 							flag = false;
 							break;
 						}
 					}
 					if (flag) {
-						addCastings(info.args.get(i), stacks);
-						if (results.Classes.get(curName).canGeneric()) {
-							return new String[] {replaceAll(info.args.get(i).toArgs(), results.Classes.get(curName).genType), replaceAll(info.returnType.get(i), results.Classes.get(curName).genType), info.AccessModifiers};
+						if (priority == null) {
+							priority = tempPrio;
 						}
 						else {
-							return new String[] {info.args.get(i).toArgs(), info.returnType.get(i), info.AccessModifiers};
+							int turner = 0;
+							for (int k = 1; k < tempPrio.length; k++) {
+								turner += priority[k] - tempPrio[k];
+							}
+							if (turner > 0) {
+								priority = tempPrio;
+							}
+							else if (turner == 0) {
+								//error ambiguous
+							}
 						}
 					}	
+				}
+			}
+			if (priority != null) {
+				addCastings(info.args.get(priority[0]), stacks);
+				if (results.Classes.get(curName).canGeneric()) {
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(curName).genType), replaceAll(info.returnType.get(priority[0]), results.Classes.get(curName).genType), info.AccessModifiers};
+				}
+				else {
+					return new String[] {info.args.get(priority[0]).toArgs(), info.returnType.get(priority[0]), info.AccessModifiers};
 				}
 			}
 				
@@ -102,8 +127,9 @@ public class CodeCreator {
 	}
 	
 	private void addCastings(ArgsList<String> argsList, ArrayList<ArrayList<String>> stacks) {
+
 		for (int i = 0; i < argsList.size(); i++) {
-			if (stacks.get(i).get(0).length() < 2 && stacks.get(i).get(0) != argsList.get(i)) {
+			if (stacks.get(i).get(0).length() < 2 && argsList.get(i).length() > 1 && stacks.get(i).get(0) != argsList.get(i) ) {
 				switch(stacks.get(i).get(0)) {
 				case "Z":
 					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false), getAllRangeStackPos.get(i)-1);
@@ -116,6 +142,9 @@ public class CodeCreator {
 					break;
 				case "I":
 					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false), getAllRangeStackPos.get(i)-1);
+					break;
+				case "C":
+					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false), getAllRangeStackPos.get(i)-1);
 					break;
 				case "F":
 					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false), getAllRangeStackPos.get(i)-1);
@@ -139,17 +168,22 @@ public class CodeCreator {
 	public String[] checkMethodvStack(String Methodname, String Classname, int size, LinkedHashMap<String, String> genTypeInfo) {
 		MethodInfo info = results.Classes.get(Classname).methods.get(Methodname);
 		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
+		int[] priority = null;
+		int[] tempPrio;
 		boolean flag;
+		int indexOf = -1;
 		String tempParam;
 		if ((!Objects.isNull(info))) {
 			for (int i = 0; i < info.args.size(); i++) {
 				if (info.args.get(i).size() == stacks.size()) {
 					flag = true;
+					tempPrio = new int[size+1];
+					tempPrio[0] = i;
 					for (int j = 0; j < stacks.size(); j++) {
 						if (info.args.get(i).get(j).startsWith("T")) {
 							tempParam = info.args.get(i).get(j);
 							
-							if (results.Classes.get(Classname).canGeneric() && !stacks.get(j).contains(results.Classes.get(Classname).genType.get(tempParam))) {
+							if (results.Classes.get(Classname).canGeneric() && (indexOf = stacks.get(j).indexOf(results.Classes.get(Classname).genType.get(tempParam))) == -1) {
 								flag = false;
 								break;
 							}
@@ -160,21 +194,49 @@ public class CodeCreator {
 								flag = false;
 								break;
 							}
+							else{
+								tempPrio[j+1] = indexOf;
+							}
 							
 						}
 						else {
-							if (!stacks.get(j).contains(info.args.get(i).get(j))) {
+							if ((indexOf = stacks.get(j).indexOf(info.args.get(i).get(j))) != -1) {
+								tempPrio[j+1] = indexOf;
+							}
+							else {
 								flag = false;
 								break;
-								//work here nextime
 							}
 						}
 						
 					}
 					if (flag) {
+						if (priority == null) {
+							priority = tempPrio;
+						}
+						else {
+							int turner = 0;
+							for (int k = 1; k < tempPrio.length; k++) {
+								turner += priority[k] - tempPrio[k];
+							}
+							if (turner > 0) {
+								priority = tempPrio;
+							}
+							else if (turner == 0) {
+								//error ambiguous
+							}
+						}
 						
-						return new String[] {replaceAll(info.args.get(i).toArgs(), results.Classes.get(Classname).genType), replaceAll(info.returnType.get(i), results.Classes.get(Classname).genType), info.AccessModifiers, genTypeInfo.get(info.returnType.get(i))};
 					}
+				}
+			}
+			if (priority != null) {
+				addCastings(info.args.get(priority[0]), stacks);
+				if (results.Classes.get(curName).canGeneric()) {
+					return new String[] {replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(curName).genType) , results.Classes.get(Classname).genType), replaceAll(replaceAll(info.returnType.get(priority[0]), results.Classes.get(curName).genType), results.Classes.get(Classname).genType), info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0]))};
+				}
+				else {
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(Classname).genType), replaceAll(info.returnType.get(priority[0]), results.Classes.get(Classname).genType), info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0]))};
 				}
 			}
 				
@@ -212,11 +274,18 @@ public class CodeCreator {
 				list.add("Ljava/lang/Boolean;");
 				list.add("Ljava/lang/Object;");
 				break;
+			case "C":
+				list.add("I");
+				list.add("Ljava/lang/Character;");
+				list.add("Ljava/lang/Object;");
+				break;
 			case "B":
+				list.add("I");
 				list.add("Ljava/lang/Byte;");
 				list.add("Ljava/lang/Object;");
 				break;
 			case "S":
+				list.add("I");
 				list.add("Ljava/lang/Short;");
 				list.add("Ljava/lang/Object;");
 				break;
@@ -721,6 +790,9 @@ public class CodeCreator {
 		else {
 			varPos.get(varSwitch).put(name, new GenVarInfo(name, conf, type, varCount[varSwitch]++).AddGenerics(generic, results, curName));
 		}
+		if (conf.equals("J") || conf.equals("D")) {
+			varCount[varSwitch]++;
+		}
 		
 
 	}
@@ -735,9 +807,21 @@ public class CodeCreator {
 				return strToByte(var.type);
 			}
 			switch(var.type) {
-			case "Z", "B", "S", "I", "C":
+			case "Z":
+				mv.visitVarInsn(Opcodes.ILOAD, var.pos);
+				return "Z";
+			case "B":
+				mv.visitVarInsn(Opcodes.ILOAD, var.pos);
+				return "B";
+			case "S":
+				mv.visitVarInsn(Opcodes.ILOAD, var.pos);
+				return "S";
+			case "I":
 				mv.visitVarInsn(Opcodes.ILOAD, var.pos);
 				return "I";
+			case "C":
+				mv.visitVarInsn(Opcodes.ILOAD, var.pos);
+				return "C";
 			case "J":
 				mv.visitVarInsn(Opcodes.LLOAD, var.pos);
 				return "J";
@@ -2236,8 +2320,6 @@ public class CodeCreator {
 
 	
 	public String evalE(ASTNode node) {
-		String str1;
-		String str2;
 		switch(node.type) {
 		case "DOT":
 			evalE(node.GetFirstNode());
@@ -2286,28 +2368,28 @@ public class CodeCreator {
 			curStack.push(new StackInfo("Z", mv.size()));
 			return "Z";
 		case "ADD":
-			str1 = evalE(node.GetFirstNode());
-			str2 = evalE(node.GetNode(1));
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(EAdd(), mv.size())).type;
 		case "SUB":
-			str1 = evalE(node.GetFirstNode());
-			str2 = evalE(node.GetNode(1));
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(ESub(), mv.size())).type;
 		case "MUL":
-			str1 = evalE(node.GetFirstNode());
-			str2 = evalE(node.GetNode(1));
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(EMul(), mv.size())).type;
 		case "DIV":
-			str1 = evalE(node.GetFirstNode());
-			str2 = evalE(node.GetNode(1));
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(EDiv(), mv.size())).type;
 		case "REM":
-			str1 = evalE(node.GetFirstNode());
-			str2 = evalE(node.GetNode(1));
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(ERem(), mv.size())).type;
 		case "EXP":
@@ -2322,8 +2404,6 @@ public class CodeCreator {
 	}
 	
 	public String evalE(ASTNode node, String TypeExpected) {
-		String str1;
-		String str2;
 		switch(node.type) {
 		case "DOT":
 			evalE(node.GetFirstNode());
@@ -2390,28 +2470,28 @@ public class CodeCreator {
 			curStack.push(new StackInfo("Z", mv.size()));
 			return "Z";
 		case "ADD":
-			str1 = evalE(node.GetFirstNode());
-			str2 = evalE(node.GetNode(1));
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(EAdd(), mv.size())).type;
 		case "SUB":
-			str1 = evalE(node.GetFirstNode());
-			str2 = evalE(node.GetNode(1));
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(ESub(), mv.size())).type;
 		case "MUL":
-			str1 = evalE(node.GetFirstNode());
-			str2 = evalE(node.GetNode(1));
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(EMul(), mv.size())).type;
 		case "DIV":
-			str1 = evalE(node.GetFirstNode());
-			str2 = evalE(node.GetNode(1));
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(EDiv(), mv.size())).type;
 		case "REM":
-			str1 = evalE(node.GetFirstNode());
-			str2 = evalE(node.GetNode(1));
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(ERem(), mv.size())).type;
 		case "EXP":
@@ -6365,6 +6445,7 @@ public class CodeCreator {
 	private String initArray(ASTNode node) {
 		ASTNode temp = node;
 		int slack = -2;
+		String valType;
 		while (temp.type != "DECLARATION" && temp.type != "DESCRIPTION") {
 			temp = temp.prev;
 			slack += 2;
@@ -6375,44 +6456,56 @@ public class CodeCreator {
 		case "bool[]":
 			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
 			enCapCode = Opcodes.IASTORE;
+			valType = "Z";
 			break;
 		case "byte[]":
 			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BYTE);
 			enCapCode = Opcodes.BASTORE;
+			valType = "B";
 			break;
 		case "shrt[]":
 			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_SHORT);
 			enCapCode = Opcodes.SASTORE;
+			valType = "S";
 			break;
 		case "int[]":
 			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_INT);
 			enCapCode = Opcodes.IASTORE;
+			valType = "I";
 			break;
 		case "char[]":
 			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_CHAR);
 			enCapCode = Opcodes.CASTORE;
+			valType = "C";
 			break;
 		case "long[]":
 			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
 			enCapCode = Opcodes.LASTORE;
+			valType = "L";
 			break;
 		case "doub[]":
 			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
 			enCapCode = Opcodes.DASTORE;
+			valType = "D";
 			break;
 		case "flt[]":
 			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_FLOAT);
 			enCapCode = Opcodes.FASTORE;
+			valType = "F";
 			break;
 		default:
-			mv.visitTypeInsn(Opcodes.ANEWARRAY, strToByte(temp.value.substring(0, temp.value.length()-slack)));
+			valType = strToByte(temp.value.substring(0, temp.value.length()-slack-2));
+			mv.visitTypeInsn(Opcodes.ANEWARRAY,valType.substring(1, valType.length()-1));
 			enCapCode = Opcodes.AASTORE;
+			
+			System.out.println(valType + "KOKOI");
 			break;
 		}
 		for (int i = 0; i < node.GetNodeSize(); i++) {
 			mv.visitInsn(Opcodes.DUP);
 			mv.visitLdcInsn(i);
 			evalE(node.GetNode(i));
+			castTopStackForVar(valType, popStack());
 			mv.visitInsn(enCapCode);
 		}
 		

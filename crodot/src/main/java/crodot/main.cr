@@ -12,21 +12,7 @@ class Barkion : Error {
 
 class Ethan <T> {
 	void sup()  {
-		byte a = 1
-		shrt b = 2
-		char c = '3'
-		int d = 4
-		flt e = 5
-		doub f = 6
-		long g = 7
-		Byte h = 8
-		Short i = 9
-		Character j = 'j'
-		Integer k = 11
-		Long l = 12
-		Float m = 13
-		Double n = 14
-		Object o = 15
+		Object[] o = [2, 3, 4]
 		
 
 	}

@@ -65,8 +65,19 @@ public class Lexer {
 				}
 				else {
 					ts.add(new token(checkKey(a), a));
-					if (ts.get(ts.size()-1).type.equals("IDENTIFIER") && ts.size() > 1 && ts.get(ts.size()-2).type.equals("IDENTIFIER")) {
-						ts.get(ts.size()-2).type = "DECLARATION";
+					if (ts.get(ts.size()-1).type.equals("IDENTIFIER") && ts.size() > 1) {
+						for (int o = ts.size()-2; o > 0; o--) {
+							if (ts.get(o).type.equals("IDENTIFIER")) {
+								ts.get(o).type = "DECLARATION";
+								break;
+							}
+							else if (!(ts.get(o).type.equals("LEFTBRACE") || ts.get(o).type.equals("RIGHTBRACE"))) {
+								break;
+							}
+							
+						}
+						
+						
 					}
 					if (ts.get(ts.size()-1).value.equals("")) {
 						ts.remove(ts.size()-1);
