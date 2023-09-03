@@ -242,7 +242,7 @@ public class Parser {
 				
 			}
 			return tree;
-		case "RIGHTBRACKET":
+		case "BRACKET":
 			return postSolve(tree, start, end-1);
 		case "BRACE":
 			int brackets2 = 0;
@@ -272,7 +272,10 @@ public class Parser {
 				else if (code.get(i).type.equals("RIGHTBRACE")) {
 					if (brackets == 0) {
 						tree.SetNode(postSolve(new ASTNode(tree), place+1, i-1));
-						return tree; 
+						if (!code.get(i+1).type.equals("LEFTBRACE")) {
+							return tree; 
+						}
+						brackets--;
 					}
 					else {
 						brackets--;

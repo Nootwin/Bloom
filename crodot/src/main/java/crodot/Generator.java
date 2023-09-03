@@ -69,7 +69,7 @@ public class Generator {
 				create.storeArr(tree.value, tree, tree.GetNode(1));
 			}
 			else {
-				create.LoadArrIndex(create.loadVar(tree.value, tree), tree);
+				create.LoadArrIndex(create.loadVar(tree.value, tree), tree, 0);
 			}
 			break;
 		case "DECLARATION":

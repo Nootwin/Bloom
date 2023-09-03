@@ -311,7 +311,7 @@ public class CodeCreator {
 			case "Ljava/lang/Object;":
 				break;
 			default:
-				if (results.Classes.get(curName).genType.containsKey(str.type)) {
+				if (str.type.contains("[") || results.Classes.get(curName).genType.containsKey(str.type)) {
 					list.add("Ljava/lang/Object;");
 					break;
 				}
@@ -2339,7 +2339,7 @@ public class CodeCreator {
 			curStack.push(new StackInfo(loadVar(node.value, node), mv.size()));
 			return stackTop();
 		case "ARR":
-			return curStack.push(new StackInfo(LoadArrIndex(loadVar(node.value, node), node), mv.size())).type;
+			return curStack.push(new StackInfo(LoadArrIndex(loadVar(node.value, node), node, 0), mv.size())).type;
 		case "BRACE":
 			return initArray(node);
 		case "C":
@@ -2423,7 +2423,7 @@ public class CodeCreator {
 			curStack.push(new StackInfo(loadVar(node.value, node), mv.size()));
 			return stackTop();
 		case "ARR":
-			return curStack.push(new StackInfo(LoadArrIndex(loadVar(node.value, node), node), mv.size())).type;
+			return curStack.push(new StackInfo(LoadArrIndex(loadVar(node.value, node), node, 0), mv.size())).type;
 		case "BRACE":
 			return initArray(node);
 		case "C":
@@ -6406,12 +6406,12 @@ public class CodeCreator {
 		return null;
 	}
 
-	public String LoadArrIndex(String type, ASTNode node) {
+	public String LoadArrIndex(String type, ASTNode node, int MatrixIndex) {
 		evalE(node.GetFirstNode());
-		popStack();
-		if (node.GetFirstNode().GetNodeSize() > 0) {
+		castTopStackForVar("I", popStack());
+		if (node.GetNodeSize() - MatrixIndex > 1) {
 			mv.visitInsn(Opcodes.AALOAD);
-			return LoadArrIndex(type.replaceFirst("[", ""), node.GetFirstNode());
+			return LoadArrIndex(type.replaceFirst("\\[", ""), node, MatrixIndex + 1);
 		}
 		else {
 			switch(type) {
@@ -6438,7 +6438,8 @@ public class CodeCreator {
 				return "F";
 			default:
 				mv.visitInsn(Opcodes.AALOAD);
-				return type.replaceFirst("[", "");
+				System.out.println(type + "BARKABR");
+				return type.replaceFirst("\\[", "");
 			}
 		}
 		
@@ -6501,7 +6502,7 @@ public class CodeCreator {
 				mv.visitTypeInsn(Opcodes.ANEWARRAY, valType);
 			}
 			else {
-				mv.visitTypeInsn(Opcodes.ANEWARRAY, valType.substring(1, valType.length()));
+				mv.visitTypeInsn(Opcodes.ANEWARRAY, valType.substring(1, valType.length()-1));
 			}
 			
 			enCapCode = Opcodes.AASTORE;

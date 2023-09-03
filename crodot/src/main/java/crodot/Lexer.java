@@ -158,7 +158,7 @@ public class Lexer {
 					a += i;
 					b = "NUMBER";
 				}
-				else if (!Character.isDigit(i) && !Character.isLetter(i) && !Character.isWhitespace(i) && i !=  '"' && i !=  ';' && i != '(' && i != ')' && i != '{' && i != '}' && i != '[' && i != ']' && i!= '?') {
+				else if (!Character.isDigit(i) && !Character.isLetter(i) && !Character.isWhitespace(i) && i !=  '"' && i !=  ';' && i != '(' && i != ')' && i != '{' && i != '}' && i != '[' && i != ']' && i!= '?' && i != ',') {
 					a += i;
 				}
 				else {
