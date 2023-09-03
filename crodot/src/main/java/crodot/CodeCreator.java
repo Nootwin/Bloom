@@ -324,7 +324,6 @@ public class CodeCreator {
 				}
 				catch (ClassNotFoundException e){
 					list.add("Ljava/lang/Object;");
-					System.out.println("BOCKBOCK" + str);
 					e.printStackTrace();
 				}
 				
@@ -606,8 +605,7 @@ public class CodeCreator {
 	}
 	
 	public String IfImport(String type) {
-		System.out.println(type);
-		System.out.println(results.Classes.containsKey(type));
+
 		if (results.Classes.containsKey(type)) {
 			return results.Classes.get(type).name;
 		}
@@ -765,7 +763,7 @@ public class CodeCreator {
 	}
 	
 	public void newVar(String name, String type, ASTNode generic) {
-		System.out.println("what" + type);
+
 		String conf = strToByte(type);
 		castTopStackForVar(conf, popStack());
 		switch(type) {
@@ -6407,7 +6405,7 @@ public class CodeCreator {
 	}
 
 	public String LoadArrIndex(String type, ASTNode node, int MatrixIndex) {
-		evalE(node.GetFirstNode());
+		evalE(node.GetNode(MatrixIndex));
 		castTopStackForVar("I", popStack());
 		if (node.GetNodeSize() - MatrixIndex > 1) {
 			mv.visitInsn(Opcodes.AALOAD);
@@ -6438,7 +6436,6 @@ public class CodeCreator {
 				return "F";
 			default:
 				mv.visitInsn(Opcodes.AALOAD);
-				System.out.println(type + "BARKABR");
 				return type.replaceFirst("\\[", "");
 			}
 		}
@@ -6507,7 +6504,6 @@ public class CodeCreator {
 			
 			enCapCode = Opcodes.AASTORE;
 			
-			System.out.println(valType + "KOKOI");
 			break;
 		}
 		for (int i = 0; i < node.GetNodeSize(); i++) {

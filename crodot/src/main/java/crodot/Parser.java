@@ -251,12 +251,11 @@ public class Parser {
 				if (code.get(i).type.equals("SEPERATOR") && brackets2 == 0) {
 					tree.SetNode(postSolve(new ASTNode(tree), next, i-1));
 					next = i;
-				
 				}
-				else if (code.get(i).type.equals("LEFTBRACKET")) {
+				else if (code.get(i).type.equals("LEFTBRACE")) {
 					brackets2++;
 				}
-				else if (code.get(i).type.equals("RIGHTBRACKET")) {
+				else if (code.get(i).type.equals("RIGHTBRACE")) {
 					brackets2--;
 				}
 				
