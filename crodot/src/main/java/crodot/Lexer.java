@@ -71,8 +71,14 @@ public class Lexer {
 								ts.get(o).type = "DECLARATION";
 								break;
 							}
-							else if (!(ts.get(o).type.equals("LEFTBRACE") || ts.get(o).type.equals("RIGHTBRACE"))) {
+							else if (ts.get(o).type.equals("LEFTBRACE")) {
+								if (!ts.get(o+1).type.equals("RIGHTBRACE")) {
+									break;
+								}
+							}
+							else if (!(ts.get(o).type.equals("RIGHTBRACE"))) {
 								break;
+								
 							}
 							
 						}

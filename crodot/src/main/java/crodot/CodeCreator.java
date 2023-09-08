@@ -763,7 +763,7 @@ public class CodeCreator {
 	}
 	
 	public void newVar(String name, String type, ASTNode generic) {
-
+		System.out.println("FLY: " + name + " " + type);
 		String conf = strToByte(type);
 		castTopStackForVar(conf, popStack());
 		switch(type) {
@@ -854,9 +854,15 @@ public class CodeCreator {
 				info = results.Classes.get(curName);
 				mv.visitVarInsn(Opcodes.ALOAD, 0);
 			}
+			if (info.fields.containsKey(name)) {
+				mv.visitFieldInsn(Opcodes.GETFIELD, info.name, name, info.fields.get(name).type);
+				return info.fields.get(name).type;
+			}
+			else {
+				return "<ARRDEF>";
+			}
 			
-			mv.visitFieldInsn(Opcodes.GETFIELD, info.name, name, info.fields.get(name).type);
-			return info.fields.get(name).type;
+			
 			
 		}
 		
@@ -6405,6 +6411,48 @@ public class CodeCreator {
 	}
 
 	public String LoadArrIndex(String type, ASTNode node, int MatrixIndex) {
+		if (type.equals("<ARRDEF>")) {
+			if (node.GetNodeSize() > 1) {
+				String valType;
+				for (int i = 0; i < node.GetNodeSize(); i++) {
+					mv.visitLdcInsn(evalE(node.GetNode(i), "I"));
+				}
+				mv.visitMultiANewArrayInsn(valType = strToByte(node.value), node.GetNodeSize());
+				return valType;
+			}
+			System.out.println(node.value + " jk");
+			mv.visitLdcInsn(evalE(node.GetFirstNode(), "I"));
+			switch(node.value) {
+			case "bool":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
+				return "[Z";
+			case "byte":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BYTE);
+				return "[B";
+			case "shrt":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_SHORT);
+				return "[S";
+			case "int":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_INT);
+				return "[I";
+			case "char":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_CHAR);
+				return "[C";
+			case "long":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
+				return "[J";
+			case "doub":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
+				return "[D";
+			case "flt":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_FLOAT);
+				return "[F";
+			default:
+				String valType = strToByte(node.value);
+				mv.visitTypeInsn(Opcodes.ANEWARRAY, valType.substring(1, valType.length()-1));
+				return valType;
+			}
+		}
 		evalE(node.GetNode(MatrixIndex));
 		castTopStackForVar("I", popStack());
 		if (node.GetNodeSize() - MatrixIndex > 1) {
@@ -6434,6 +6482,9 @@ public class CodeCreator {
 			case "[F":
 				mv.visitInsn(Opcodes.FALOAD);
 				return "F";
+			case "[J":
+				mv.visitInsn(Opcodes.LALOAD);
+				return "J";
 			default:
 				mv.visitInsn(Opcodes.AALOAD);
 				return type.replaceFirst("\\[", "");
@@ -6481,7 +6532,7 @@ public class CodeCreator {
 		case "long[]":
 			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
 			enCapCode = Opcodes.LASTORE;
-			valType = "L";
+			valType = "J";
 			break;
 		case "doub[]":
 			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);

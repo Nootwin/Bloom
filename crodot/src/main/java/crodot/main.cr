@@ -1,9 +1,10 @@
 
 class Ethan <T> {
 	void sup()  {
-		Object[][] o = [["meow", "doggy"], ["bark", "doo", 4]]
-		print(o[0][1])
-		print(o[1][2])
+		int[] s = int[5]
+		for int i = 0; i < 5; i + 1 {
+			print(s[i])
+		}
 		
 
 	}
