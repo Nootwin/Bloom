@@ -437,12 +437,33 @@ public class CodeCreator {
 		OtherClass = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
 		curName = classnode.GetFirstNode().value;
 		cw = OtherClass;
-		ASTNode temp;
+		ASTNode temp = classnode;
+		int privacy = 0;
+		while ((temp = temp.prev).type.equals("ACCESS")) {
+			switch(classnode.prev.type) {
+			case "local":
+				privacy += Opcodes.ACC_OPEN;
+				break;
+			case "final":
+				privacy += Opcodes.ACC_FINAL;
+				break;
+			}
+		}
+		if (temp == classnode.prev) {
+			privacy += Opcodes.ACC_PUBLIC;
+		}
+		System.out.println(classnode.value);
+		if (classnode.value.equals("abstract")) {
+			privacy += Opcodes.ACC_ABSTRACT;
+		}
+		else if (classnode.value.equals("interface")) {
+			privacy += Opcodes.ACC_INTERFACE;
+		}
 		if ((temp = classnode.Grab("PARENT")) != null) {
-			cw.visit(Opcodes.V19, Opcodes.ACC_PUBLIC, curName, signatureWriterClass(classnode), IfImport(temp.value), null);
+			cw.visit(Opcodes.V19, privacy, curName, signatureWriterClass(classnode), IfImport(temp.value), null);
 		}
 		else {
-			cw.visit(Opcodes.V19, Opcodes.ACC_PUBLIC, curName, signatureWriterClass(classnode), "java/lang/Object", null);
+			cw.visit(Opcodes.V19, privacy, curName, signatureWriterClass(classnode), "java/lang/Object", null);
 		}
 		
 		return false;
@@ -798,13 +819,15 @@ public class CodeCreator {
 	}
 	
 	public String loadVar(String name, ASTNode node) {
+		
 		VarInfo var;
 		if (varPos.get(varSwitch).containsKey(name)) {
 			var = varPos.get(varSwitch).get(name);
-
+			System.out.println(var.name + var.type);
 			if (var.type.contains("[")) {
 				mv.visitVarInsn(Opcodes.ALOAD, var.pos);
-				return strToByte(var.type);
+				
+				return var.toString();
 			}
 			switch(var.type) {
 			case "Z":
@@ -833,8 +856,7 @@ public class CodeCreator {
 				return "F";
 			default:
 				mv.visitVarInsn(Opcodes.ALOAD, var.pos);
-
-				return strToByte(var.toString());
+				return var.toString();
 				
 			}
 		}
@@ -853,10 +875,13 @@ public class CodeCreator {
 			else {
 				info = results.Classes.get(curName);
 				mv.visitVarInsn(Opcodes.ALOAD, 0);
+				
 			}
 			if (info.fields.containsKey(name)) {
 				mv.visitFieldInsn(Opcodes.GETFIELD, info.name, name, info.fields.get(name).type);
+				System.out.println("DOES THIS EVEN RESOLVE");
 				return info.fields.get(name).type;
+				
 			}
 			else {
 				return "<ARRDEF>";
@@ -6415,13 +6440,13 @@ public class CodeCreator {
 			if (node.GetNodeSize() > 1) {
 				String valType;
 				for (int i = 0; i < node.GetNodeSize(); i++) {
-					mv.visitLdcInsn(evalE(node.GetNode(i), "I"));
+					evalE(node.GetNode(i), "I");
 				}
 				mv.visitMultiANewArrayInsn(valType = strToByte(node.value), node.GetNodeSize());
 				return valType;
 			}
 			System.out.println(node.value + " jk");
-			mv.visitLdcInsn(evalE(node.GetFirstNode(), "I"));
+			evalE(node.GetFirstNode(), "I");
 			switch(node.value) {
 			case "bool":
 				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
@@ -6486,6 +6511,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.LALOAD);
 				return "J";
 			default:
+				System.out.println(type + "sup");
 				mv.visitInsn(Opcodes.AALOAD);
 				return type.replaceFirst("\\[", "");
 			}
