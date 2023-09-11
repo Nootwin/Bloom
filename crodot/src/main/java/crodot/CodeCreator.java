@@ -6347,7 +6347,7 @@ public class CodeCreator {
 		int i = 1;
 		boolean flag = false;
 		String resultString;
-		while (!(curGen = methodCall.GetNode(i)).type.equals("START")) {
+		while (methodCall.GetNodeSize() > i && !(curGen = methodCall.GetNode(i)).type.equals("START")) {
 			b.append(resultString = strToByte(curGen.value));
 			if (resultString.startsWith("T")) {
 				flag = true;

@@ -310,6 +310,14 @@ public class Parser {
 	
 	int decide(int p) {
 		switch(code.get(p).type) {
+		case "ACCDEF":
+			if (cur.prev.type.equals("DEFINITION")) {
+				code.get(p).type = "ACCESS";
+			}
+			else {
+				code.get(p).type = "DEFINITION";
+			}
+			return decide(p);
 		case "IMPORT":
 			cur.SetNode(new ASTNode(cur, "IMPORT", "import"));
 			cur = cur.GetLastNode();

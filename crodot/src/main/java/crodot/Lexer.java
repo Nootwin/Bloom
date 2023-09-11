@@ -8,7 +8,7 @@ public class Lexer {
 	
 	
 	static String checkKey(String a) {
-		final String[][] keywords = {{"import", "IMPORT"}, {"if", "CONDITIONAL"}, {"else", "CONDITIONAL"}, {"while", "LOOP"}, {"for", "LOOP"}, {"foreach", "LOOP"}, {"int", "DECLARATION"}, {"byte", "DECLARATION"}, {"shrt", "DECLARATION"}, {"long", "DECLARATION"}, {"doub", "DECLARATION"}, {"str", "DECLARATION"}, {"char", "DECLARATION"}, {"flt", "DECLARATION"}, {"bool", "DECLARATION"}, {"void", "DECLARATION"}, {"class", "DEFINITION"}, {"abstract", "DEFINITION"}, {"interface", "DEFINITION"}, {"null", "NULLVALUE"}, {"return", "RETURN"}, {"true", "BOOLEAN"}, {"false", "BOOLEAN"}, {"local", "ACCESS"},  {"proc", "ACCESS"}, {"hidden", "ACCESS"}, {"static", "ACCESS"}};
+		final String[][] keywords = {{"import", "IMPORT"}, {"if", "CONDITIONAL"}, {"else", "CONDITIONAL"}, {"while", "LOOP"}, {"for", "LOOP"}, {"foreach", "LOOP"}, {"int", "DECLARATION"}, {"byte", "DECLARATION"}, {"shrt", "DECLARATION"}, {"long", "DECLARATION"}, {"doub", "DECLARATION"}, {"str", "DECLARATION"}, {"char", "DECLARATION"}, {"flt", "DECLARATION"}, {"bool", "DECLARATION"}, {"void", "DECLARATION"}, {"class", "DEFINITION"}, {"abstract", "ACCDEF"}, {"interface", "DEFINITION"}, {"null", "NULLVALUE"}, {"return", "RETURN"}, {"true", "BOOLEAN"}, {"false", "BOOLEAN"}, {"local", "ACCESS"},  {"proc", "ACCESS"}, {"hidden", "ACCESS"}, {"static", "ACCESS"}};
 		for (String[] i: keywords) {
 			if (i[0].equals(a)) {
 				return i[1];

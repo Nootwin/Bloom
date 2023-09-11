@@ -1,4 +1,8 @@
-abstract Olivia {
+local abstract Olivia {
+	abstract int bulb(int x)
+}
+
+interface Chase {
 
 }
 
