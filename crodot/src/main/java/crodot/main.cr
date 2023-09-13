@@ -11,7 +11,7 @@ interface Chase {
 class Ethan <T> {
 	local int field = 5
 	
-	void sup()  {
+	priv void sup()  {
 		int[] s = int[5]
 		for int i = 0; i < 5; i + 1 {
 			print(s[i])

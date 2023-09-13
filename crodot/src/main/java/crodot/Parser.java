@@ -408,6 +408,11 @@ public class Parser {
 						while (!cur.type.equals("DESCRIPTION")) {
 							cur = cur.prev;
 						}
+						if (!code.get(i+1).type.equals("LEFTCURLY")) {
+							
+							cur.SetLast(new ASTNode(cur, "START", ";"));
+							cur = cur.GetLastNode();
+						}
 						return i+1;
 					case "DECLARATION":
 						if (genIndex == 0) {
@@ -539,7 +544,16 @@ public class Parser {
 				}
 			}
 		case "ENDOFLINE":
+			if (cur.type.equals("START") && cur.value.equals(";")) {
+				cur.SetNode(new ASTNode(cur, "END", "}"));
+				cur = cur.prev.prev;
+				if (cur.type.equals("ACCESS")) {
+					cur = cur.prev;
+				}
+				return p+1;
+			}
 			cur = cur.prev;
+			
 			if (cur.type.equals("ACCESS")) {
 				cur = cur.prev;
 			}

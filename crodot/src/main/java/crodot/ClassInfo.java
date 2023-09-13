@@ -10,9 +10,12 @@ public class ClassInfo {
 	String name;
 	String parent;
 	boolean construct;
+	int AccessOpcode;
+	String AccessModifiers;
 	HashMap<String, MethodInfo> methods;
 	HashMap<String, FieldInfo> fields;
 	LinkedHashMap<String, String> genType;
+	
 	
 	ClassInfo(String name) {
 		this.name = name;

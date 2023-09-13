@@ -5,6 +5,7 @@ import java.util.LinkedList;
 public class MethodInfo {
 	String name;
 	String AccessModifiers;
+	int AccessOpcode;
 	LinkedList<ArgsList<String>> args;
 	LinkedList<String> returnType;
 	

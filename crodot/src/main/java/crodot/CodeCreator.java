@@ -436,20 +436,23 @@ public class CodeCreator {
 	public boolean newClass(ASTNode classnode) {
 		OtherClass = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
 		curName = classnode.GetFirstNode().value;
+		System.out.println( "pop" + curName);
 		cw = OtherClass;
 		ASTNode temp = classnode;
 		int privacy = 0;
+		boolean isPublic = true;
 		while ((temp = temp.prev).type.equals("ACCESS")) {
-			switch(classnode.prev.type) {
+			switch(temp.value) {
 			case "local":
 				privacy += Opcodes.ACC_OPEN;
+				isPublic = false;
 				break;
 			case "final":
 				privacy += Opcodes.ACC_FINAL;
 				break;
 			}
 		}
-		if (temp == classnode.prev) {
+		if (isPublic) {
 			privacy += Opcodes.ACC_PUBLIC;
 		}
 		System.out.println(classnode.value);
@@ -498,6 +501,53 @@ public class CodeCreator {
 		String returnType = strToByte(tree.value);
 		this.returnType = returnType;
 		String signature = signatureWriterMethod(tree);
+		int privacy = 0;
+		boolean isPublic = true;
+		ASTNode temp = tree;
+		while ((temp = temp.prev).type.equals("ACCESS")) {
+			switch(temp.value) {
+			case "local":
+				if (isPublic) {
+					privacy += Opcodes.ACC_OPEN;
+					isPublic = false;
+				}
+				else {
+					//error
+				}
+				break;
+			case "priv":
+				if (isPublic) {
+					System.out.println("PRIVATE");
+					privacy += Opcodes.ACC_PRIVATE;
+					isPublic = false;
+				}
+				else {
+					//error
+				}
+				break;
+			case "proc":
+				if (isPublic) {
+					privacy += Opcodes.ACC_PROTECTED;
+					isPublic = false;
+				}
+				else {
+					//error
+				}
+				break;
+			case "final":
+				privacy += Opcodes.ACC_FINAL;
+				break;
+			case "static":
+				privacy += Opcodes.ACC_STATIC;
+				break;
+			case "abstract":
+				privacy += Opcodes.ACC_ABSTRACT;
+				break;
+			}
+		}
+		if (isPublic) {
+			privacy += Opcodes.ACC_PUBLIC;
+		}
 		if (!results.Classes.get(curName).methods.get(methodName).AccessModifiers.contains("static")) {
 			varPos.get(1).put("this", new VarInfo("this" , curName, 0));
 			varCount[1] = 1;
@@ -505,12 +555,12 @@ public class CodeCreator {
 		}
 		ArgsList<String> args = fromNodetoArg(tree);
 		if (methodName.equals(curName)) {
-			mv = new CrodotMethodVisitor(cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", args.toArgs() + returnType, signature, null));
+			mv = new CrodotMethodVisitor(cw.visitMethod(privacy, "<init>", args.toArgs() + returnType, signature, null));
 			addDefaultstoConst(curName);
 			results.Classes.get(curName).construct = true;
 		}
 		else {
-			mv = new CrodotMethodVisitor(cw.visitMethod( getMethodAccess(curName, methodName), methodName,  args.toArgs() + returnType, signature, null));
+			mv = new CrodotMethodVisitor(cw.visitMethod(privacy, methodName,  args.toArgs() + returnType, signature, null));
 		}
 		
 		labelList = new Stack<>();
@@ -609,6 +659,7 @@ public class CodeCreator {
 			case "bool":
 				return "Z";
 			default:
+				System.out.println(curName);
 				if (results.Classes.get(curName).canGeneric() && results.Classes.get(curName).genType.containsKey("T" + str + ";")) {
 					return "T" + str + ";";
 				}
@@ -744,8 +795,8 @@ public class CodeCreator {
 	public ArgsList<String> fromNodetoArg(ASTNode parent) {
 		ArgsList<String> build = new ArgsList<>();
 		for (int i = 1; i < parent.GetNodeSize()-1; i++) {
-
-			if (results.Classes.get(curName).genType.containsKey("T" + parent.GetNode(i).value + ";")) {
+			
+			if (results.Classes.get(curName).canGeneric() && results.Classes.get(curName).genType.containsKey("T" + parent.GetNode(i).value + ";")) {
 				build.add(results.Classes.get(curName).genType.get("T" + parent.GetNode(i).value + ";"));
 			}
 			else {
@@ -776,6 +827,7 @@ public class CodeCreator {
 		}
 	}
 	public void newField(String name, String type, int Access, ASTNode node) {
+		System.out.println(name + type + Access);
 		cw.visitField(Access, name, strToByte(type), signatureWriterField(node), null).visitEnd();
 		
 	}

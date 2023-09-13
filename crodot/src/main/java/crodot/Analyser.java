@@ -11,6 +11,8 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.Map.Entry;
 
+import org.objectweb.asm.Opcodes;
+
 
 
 
@@ -20,6 +22,9 @@ public class Analyser {
 	private ASTNode trees;
 	private String storage;
 	private ASTNode temp;
+	private int privacy = 0;
+	private StringBuilder privacyString;
+	private boolean accAlr;
 	
 	Analyser(ASTNode trees) {
 		this.trees = trees;
@@ -368,6 +373,28 @@ public class Analyser {
 		case "DEFINITION":
 			curClass = tree.GetFirstNode().value;
 			results.Classes.put(curClass, new ClassInfo(curClass));
+			if (!accAlr) {
+				if (privacy == 0) {
+					results.Classes.get(curClass).AccessModifiers = "public";
+					results.Classes.get(curClass).AccessOpcode = Opcodes.ACC_PUBLIC;
+				}
+				else {
+					results.Classes.get(curClass).AccessModifiers = privacyString.append("public").toString();
+					results.Classes.get(curClass).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
+					
+					privacyString.setLength(0);
+					privacy = 0;
+					accAlr = true;
+				}
+			}
+			else {
+				results.Classes.get(curClass).AccessModifiers = privacyString.toString();
+				results.Classes.get(curClass).AccessOpcode = privacy;
+				
+				privacyString.setLength(0);
+				privacy = 0;
+				accAlr = true;
+			}
 			if ((temp = tree.Grab("PARENT")) != null) {
 				results.Classes.get(curClass).parent = IfImport(temp.value);
 			}
@@ -400,6 +427,45 @@ public class Analyser {
 
 			break;
 		case "ACCESS":
+				switch(tree.value) {
+				case "local":
+					if (accAlr) {
+						privacy += Opcodes.ACC_OPEN;
+						accAlr = false;
+					}
+					else {
+						//error
+					}
+					break;
+				case "priv":
+					if (accAlr) {
+						System.out.println("PRIVATE");
+						privacy += Opcodes.ACC_PRIVATE;
+						accAlr = false;
+					}
+					else {
+						//error
+					}
+					break;
+				case "proc":
+					if (accAlr) {
+						privacy += Opcodes.ACC_PROTECTED;
+						accAlr = false;
+					}
+					else {
+						//error
+					}
+					break;
+				case "final":
+					privacy += Opcodes.ACC_FINAL;
+					break;
+				case "static":
+					privacy += Opcodes.ACC_STATIC;
+					break;
+				case "abstract":
+					privacy += Opcodes.ACC_ABSTRACT;
+					break;
+				}
 				analyse1(tree.GetFirstNode());
 				break;
 		case "DESCRIPTION":
@@ -408,12 +474,17 @@ public class Analyser {
 				results.Classes.get("Main").methods.put(storage, new MethodInfo(tree.GetFirstNode().value, strToByte(tree.value)));
 				results.Classes.get("Main").methods.get(storage).args.add(fromNodetoArg(tree));
 				
-				results.Classes.get("Main").methods.get(storage).AccessModifiers = "static";
+				results.Classes.get("Main").methods.get(storage).AccessModifiers = privacyString.append("static").toString();
+				results.Classes.get("Main").methods.get(storage).AccessOpcode = privacy + Opcodes.ACC_STATIC;
 				
+				privacyString.setLength(0);
+				privacy = 0;
+				accAlr = true;
 				
 			}
 			else if (curClass.equals(tree.GetFirstNode().value)) {
 				results.Classes.get(curClass).methods.get(storage).args.add(fromNodetoArg(tree));
+				
 			}
 			else {
 				results.Classes.get(curClass).methods.put(storage, new MethodInfo(tree.GetFirstNode().value, strToByte(tree.value)));
