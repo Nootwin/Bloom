@@ -6,6 +6,7 @@ public class FieldInfo {
 	String name;
 	String type;
 	String AccessModifiers;
+	int AccessOpcode;
 	ASTNode OwnerValue;
 	
 	FieldInfo(String name) {

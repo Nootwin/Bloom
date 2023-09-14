@@ -23,7 +23,7 @@ public class Analyser {
 	private String storage;
 	private ASTNode temp;
 	private int privacy = 0;
-	private StringBuilder privacyString;
+	private StringBuilder privacyString = new StringBuilder();
 	private boolean accAlr;
 	
 	Analyser(ASTNode trees) {
@@ -373,12 +373,35 @@ public class Analyser {
 		case "DEFINITION":
 			curClass = tree.GetFirstNode().value;
 			results.Classes.put(curClass, new ClassInfo(curClass));
-			if (!accAlr) {
+			if (accAlr) {
 				if (privacy == 0) {
-					results.Classes.get(curClass).AccessModifiers = "public";
-					results.Classes.get(curClass).AccessOpcode = Opcodes.ACC_PUBLIC;
+					switch(tree.value) {
+					case "abstract":
+						results.Classes.get(curClass).AccessModifiers = "public abstract";
+						results.Classes.get(curClass).AccessOpcode = Opcodes.ACC_PUBLIC + Opcodes.ACC_ABSTRACT;
+						break;
+					case "interface":
+						results.Classes.get(curClass).AccessModifiers = "public interface";
+						results.Classes.get(curClass).AccessOpcode = Opcodes.ACC_PUBLIC + Opcodes.ACC_INTERFACE + Opcodes.ACC_ABSTRACT;
+						break;
+					default:
+						results.Classes.get(curClass).AccessModifiers = "public";
+						results.Classes.get(curClass).AccessOpcode = Opcodes.ACC_PUBLIC;
+						break;
+					}
+					
 				}
 				else {
+					switch(tree.value) {
+					case "abstract":
+						privacyString.append("abstract ");
+						privacy += Opcodes.ACC_ABSTRACT;
+						break;
+					case "interface":
+						privacyString.append("interface");
+						privacy += Opcodes.ACC_INTERFACE + Opcodes.ACC_ABSTRACT;
+						break;
+					}
 					results.Classes.get(curClass).AccessModifiers = privacyString.append("public").toString();
 					results.Classes.get(curClass).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
 					
@@ -388,6 +411,16 @@ public class Analyser {
 				}
 			}
 			else {
+				switch(tree.value) {
+				case "abstract":
+					privacyString.append("abstract ");
+					privacy += Opcodes.ACC_ABSTRACT;
+					break;
+				case "interface":
+					privacyString.append("interface");
+					privacy += Opcodes.ACC_INTERFACE + Opcodes.ACC_ABSTRACT;
+					break;
+				}
 				results.Classes.get(curClass).AccessModifiers = privacyString.toString();
 				results.Classes.get(curClass).AccessOpcode = privacy;
 				
@@ -427,6 +460,7 @@ public class Analyser {
 
 			break;
 		case "ACCESS":
+				System.out.println(tree.value);
 				switch(tree.value) {
 				case "local":
 					if (accAlr) {
@@ -439,16 +473,19 @@ public class Analyser {
 					break;
 				case "priv":
 					if (accAlr) {
+						privacyString.append("private");
 						System.out.println("PRIVATE");
 						privacy += Opcodes.ACC_PRIVATE;
 						accAlr = false;
 					}
 					else {
+						System.out.println("ERROR");
 						//error
 					}
 					break;
 				case "proc":
 					if (accAlr) {
+						privacyString.append("protected");
 						privacy += Opcodes.ACC_PROTECTED;
 						accAlr = false;
 					}
@@ -457,12 +494,15 @@ public class Analyser {
 					}
 					break;
 				case "final":
+					privacyString.append("final");
 					privacy += Opcodes.ACC_FINAL;
 					break;
 				case "static":
+					privacyString.append("static");
 					privacy += Opcodes.ACC_STATIC;
 					break;
 				case "abstract":
+					privacyString.append("abstract");
 					privacy += Opcodes.ACC_ABSTRACT;
 					break;
 				}
@@ -484,23 +524,86 @@ public class Analyser {
 			}
 			else if (curClass.equals(tree.GetFirstNode().value)) {
 				results.Classes.get(curClass).methods.get(storage).args.add(fromNodetoArg(tree));
+				if (accAlr) {
+					if (privacy == 0) {
+						results.Classes.get(curClass).methods.get(storage).AccessModifiers = "public";
+						results.Classes.get(curClass).methods.get(storage).AccessOpcode = Opcodes.ACC_PUBLIC;
+					}
+					else {
+						results.Classes.get(curClass).methods.get(storage).AccessModifiers = privacyString.append("public").toString();
+						results.Classes.get(curClass).methods.get(storage).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
+						
+						privacyString.setLength(0);
+						privacy = 0;
+						accAlr = true;
+					}
+				}
+				else {
+					results.Classes.get(curClass).methods.get(storage).AccessModifiers = privacyString.toString();
+					results.Classes.get(curClass).methods.get(storage).AccessOpcode = privacy;
+					
+					privacyString.setLength(0);
+					privacy = 0;
+					accAlr = true;
+				}
 				
 			}
 			else {
 				results.Classes.get(curClass).methods.put(storage, new MethodInfo(tree.GetFirstNode().value, strToByte(tree.value)));
 				results.Classes.get(curClass).methods.get(storage).args.add(fromNodetoArg(tree));
 				
-				if (tree.prev.type.equals("ACCESS")) {
-					results.Classes.get(curClass).methods.get(storage).AccessModifiers = tree.prev.value;
+				if (accAlr) {
+					
+					if (privacy == 0) {
+						results.Classes.get(curClass).methods.get(storage).AccessModifiers = "public";
+						results.Classes.get(curClass).methods.get(storage).AccessOpcode = Opcodes.ACC_PUBLIC;
+					}
+					else {
+						results.Classes.get(curClass).methods.get(storage).AccessModifiers = privacyString.append("public").toString();
+						results.Classes.get(curClass).methods.get(storage).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
+						
+						privacyString.setLength(0);
+						privacy = 0;
+						accAlr = true;
+					}
 				}
 				else {
-					results.Classes.get(curClass).methods.get(storage).AccessModifiers = "public";
+					System.out.println(privacyString.toString() + "    " + privacy + "    " + Opcodes.ACC_PRIVATE);
+					results.Classes.get(curClass).methods.get(storage).AccessModifiers = privacyString.toString();
+					results.Classes.get(curClass).methods.get(storage).AccessOpcode = privacy;
+					
+					privacyString.setLength(0);
+					privacy = 0;
+					accAlr = true;
 				}
 			}
 			break;
 		case "DECLARATION":
 			if (!curClass.isBlank()) {
-				results.Classes.get(curClass).fields.put(tree.GetFirstNode().value, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), tree.GetNode(1)));
+				String name = tree.GetFirstNode().value;
+				results.Classes.get(curClass).fields.put(name, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), tree.GetNode(1)));
+				if (accAlr) {
+					if (privacy == 0) {
+						results.Classes.get(curClass).fields.get(name).AccessModifiers = "public";
+						results.Classes.get(curClass).fields.get(name).AccessOpcode = Opcodes.ACC_PUBLIC;
+					}
+					else {
+						results.Classes.get(curClass).fields.get(name).AccessModifiers = privacyString.append("public").toString();
+						results.Classes.get(curClass).fields.get(name).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
+						
+						privacyString.setLength(0);
+						privacy = 0;
+						accAlr = true;
+					}
+				}
+				else {
+					results.Classes.get(curClass).fields.get(name).AccessModifiers = privacyString.toString();
+					results.Classes.get(curClass).fields.get(name).AccessOpcode = privacy;
+					
+					privacyString.setLength(0);
+					privacy = 0;
+					accAlr = true;
+				}
 			}
 			break;
 		case "END":
