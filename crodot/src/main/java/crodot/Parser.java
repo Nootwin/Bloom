@@ -48,27 +48,46 @@ public class Parser {
 	ASTNode preSolve(ASTNode tree, int start, int end) { 
 		int index = preOrder.length;
 		int place = end;
+		PreOrder unit;
+		PreOrder bestUnit = null;
 		brackets = 0;
 		
 		for (int i = end; i > start; i--) {
 			if (brackets == 0) {
-				for (int j = 0; j < index; j++) {
-					if (code.get(i).type.equals(preOrder[j][0])) {
-						index = j;
-						place = i;
-						tree.type = preOrder[j][1];
-						tree.value = code.get(i).value;
-						if (tree.type.equals("VAR")) {
-							if (code.get(i+1).type.equals("LEFTBRACKET")) {
-								tree.type = "FUN";
-							}
-							if (code.get(i+1).type.equals("LEFTBRACE")) {
-								tree.type = "ARR";
-							}
+				unit = PreOrder.valueOf(code.get(i).type);
+				if (bestUnit == null || unit.priority < bestUnit.priority) {
+					if (unit.newValue.equals("VAR")) {
+						if (code.get(i+1).type.equals("LEFTBRACKET")) {
+							unit = PreOrder.FUN;
 						}
-						break;
-					}
+						else if (code.get(i+1).type.equals("LEFTBRACE")) {
+							unit = PreOrder.ARR;
+						}
+								
+						}
+					
+					bestUnit = unit;
+					place = i;
+					tree.value = code.get(i).value;
 				}
+		
+//				for (int j = 0; j < index; j++) {
+//					if (code.get(i).type.equals(preOrder[j][0])) {
+//						index = j;
+//						place = i;
+//						tree.type = preOrder[j][1];
+//						tree.value = code.get(i).value;
+//						if (tree.type.equals("VAR")) {
+//							if (code.get(i+1).type.equals("LEFTBRACKET")) {
+//								tree.type = "FUN";
+//							}
+//							if (code.get(i+1).type.equals("LEFTBRACE")) {
+//								tree.type = "ARR";
+//							}
+//						}
+//						break;
+//					}
+//				}
 			}
 			if (code.get(i).type.equals("LEFTBRACKET") || code.get(i).type.equals("LEFTBRACE")) {
 				brackets--;
@@ -76,7 +95,9 @@ public class Parser {
 			else if (code.get(i).type.equals("RIGHTBRACKET")|| code.get(i).type.equals("RIGHTBRACE")) {
 				brackets++;
 			}
+	
 		}
+		tree.type = bestUnit.newValue;
 		switch (tree.type) {
 		case "DOT":
 			tree.SetNode(preSolve(new ASTNode(tree), start-1, place-1));
@@ -131,6 +152,8 @@ public class Parser {
 	ASTNode postSolve(ASTNode tree, int start, int end) {
 		int index = postOrder.length;
 		int place = end;
+		PostOrder unit;
+		PostOrder bestUnit = null;
 		brackets = 0;
 		if (end - start < 1) {
 			tree.type = "NULL";
@@ -139,41 +162,59 @@ public class Parser {
 		}
 		for (int i = end; i > start; i--) {
 			
-			System.out.println("BRACERS   " + code.get(i).value  + "   " + code.get(i).type + postOrder.length);
 			if (brackets == 0) {
-				for (int j = 0; j < index; j++) {
-					if (code.get(i).type.equals(postOrder[j][0])) {
-						
-						index = j;
-						place = i;
-						if (index > 1 && index < 8) {
-							index = 1;
+				unit = PostOrder.valueOf(code.get(i).type);
+				if (bestUnit == null || unit.priority < bestUnit.priority) {
+					if (unit.newValue.equals("VAR")) {
+						if (code.get(i+1).type.equals("LEFTBRACKET")) {
+							unit = PostOrder.FUN;
 						}
-						else if (index > 7 && index < 14) {
-							index = 8;
+						else if (code.get(i+1).type.equals("LEFTBRACE")) {
+							unit = PostOrder.ARR;
 						}
-						else if (index > 14 && index < 20) {
-							index = 14;
+						else if (code.get(i+1).type.equals("LEFTGENERIC")) {
+							unit = PostOrder.GENFUN;
+							
 						}
-						
-						//mark down if add or mul
-						tree.type = postOrder[j][1];
-						tree.value = code.get(i).value;
-						if (tree.type.equals("VAR")) {
-							if (code.get(i+1).type.equals("LEFTBRACKET")) {
-								tree.type = "FUN";
-							}
-							else if (code.get(i+1).type.equals("LEFTBRACE")) {
-								tree.type = "ARR";
-							}
-							else if (code.get(i+1).type.equals("LEFTGENERIC")) {
-								tree.type = "GENFUN";
-								
-							}
-						}
-						break;
 					}
+					bestUnit = unit;
+					place = i;
+					tree.value = code.get(i).value;
 				}
+				
+//				for (int j = 0; j < index; j++) {
+//					if (code.get(i).type.equals(postOrder[j][0])) {
+//						
+//						index = j;
+//						place = i;
+//						if (index > 1 && index < 8) {
+//							index = 1;
+//						}
+//						else if (index > 7 && index < 14) {
+//							index = 8;
+//						}
+//						else if (index > 14 && index < 20) {
+//							index = 14;
+//						}
+//						
+//						//mark down if add or mul
+//						tree.type = postOrder[j][1];
+//						tree.value = code.get(i).value;
+//						if (tree.type.equals("VAR")) {
+//							if (code.get(i+1).type.equals("LEFTBRACKET")) {
+//								tree.type = "FUN";
+//							}
+//							else if (code.get(i+1).type.equals("LEFTBRACE")) {
+//								tree.type = "ARR";
+//							}
+//							else if (code.get(i+1).type.equals("LEFTGENERIC")) {
+//								tree.type = "GENFUN";
+//								
+//							}
+//						}
+//						break;
+//					}
+//				}
 			}
 			if (code.get(i).type.equals("LEFTBRACKET") || code.get(i).type.equals("LEFTBRACE") || code.get(i).type.equals("LEFTGENERIC")) {
 				brackets--;
@@ -182,7 +223,7 @@ public class Parser {
 				brackets++;
 			}
 		}
-		System.out.println("SELECTED   " + tree.value);
+		tree.type = bestUnit.newValue;
 		switch (tree.type) {
 		case "ADD", "SUB", "MUL", "DIV", "REM", "EXP", "SEP", "TRUEEQUALS", "NOTEQUALS", "TRUEGREATERTHAN", "TRUELESSTHAN", "GREATERTHAN", "LESSTHAN":
 			tree.SetNode(postSolve(new ASTNode(tree), start, place-1));
