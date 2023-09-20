@@ -14,6 +14,7 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Stack;
 
+import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
@@ -6628,6 +6629,7 @@ public class CodeCreator {
 	}
 	
 	public String invokeEasy(ASTNode tree) {
+		
 		String[] Methodinfo;
 		if (tree.prev.type.equals("DOT")) {
 			LinkedHashMap<String, String> genType = null;

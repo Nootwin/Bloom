@@ -1,4 +1,4 @@
-package crodot;
+package crodotEnums;
 
 public enum PostOrder {
 	SEPERATOR(0, "SEP"),

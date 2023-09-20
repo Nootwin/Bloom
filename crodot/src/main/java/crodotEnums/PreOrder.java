@@ -1,4 +1,4 @@
-package crodot;
+package crodotEnums;
 
 public enum PreOrder {
 	DOT(3),

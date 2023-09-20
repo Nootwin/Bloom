@@ -3,6 +3,9 @@ package crodot;
 import java.util.ArrayList;
 import java.util.Objects;
 
+import crodotEnums.PostOrder;
+import crodotEnums.PreOrder;
+
 public class Parser {
 	private ASTNode parent;
 	private int fieldCounter;

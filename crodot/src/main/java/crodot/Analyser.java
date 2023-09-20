@@ -41,6 +41,15 @@ public class Analyser {
 		for (int i = 0; i < trees.GetNodeSize(); i++) {
 			analyse1(trees.GetNode(i));
 		}
+		File dir = new File(System.getProperty("user.dir"));
+		File[] directoryListing = dir.listFiles();
+		for (File child : directoryListing) {
+			if (child.getName().endsWith(".class")) {
+				Import(child.getName().substring(0, child.getName().length()-6));
+				System.out.println(child.getName().substring(0, child.getName().length()-6));
+			}
+		}
+		  
 		
 		try {
 			ArgsList<String> args = new ArgsList<>();
@@ -745,6 +754,7 @@ public class Analyser {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+
 		
 		
 	}
