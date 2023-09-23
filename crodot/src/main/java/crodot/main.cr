@@ -15,6 +15,7 @@ class Ethan <T> {
 		int[] s = int[5]
 		for int i = 0; i < 5; i + 1 {
 			print(s[i])
+			print("wooow")
 		}
 		
 

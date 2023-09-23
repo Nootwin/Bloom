@@ -1,14 +1,16 @@
-package crodot;
+package crodot.OldFiles;
 
 import java.util.ArrayList;
 
+import crodot.Token;
 
-public class Lexer {
+
+public class Lexer2 {
 	int genericCheck =0;
 	
 	
 	static String checkKey(String a) {
-		final String[][] keywords = {{"import", "IMPORT"}, {"if", "CONDITIONAL"}, {"else", "CONDITIONAL"}, {"while", "LOOP"}, {"for", "LOOP"}, {"foreach", "LOOP"}, {"int", "DECLARATION"}, {"byte", "DECLARATION"}, {"shrt", "DECLARATION"}, {"long", "DECLARATION"}, {"doub", "DECLARATION"}, {"str", "DECLARATION"}, {"char", "DECLARATION"}, {"flt", "DECLARATION"}, {"bool", "DECLARATION"}, {"void", "DECLARATION"}, {"class", "DEFINITION"}, {"abstract", "ACCDEF"}, {"interface", "DEFINITION"}, {"null", "NULLVALUE"}, {"return", "RETURN"}, {"true", "BOOLEAN"}, {"false", "BOOLEAN"}, {"local", "ACCESS"},  {"proc", "ACCESS"}, {"priv", "ACCESS"}, {"static", "ACCESS"}};
+		final String[][] keywords = {{"import", "IMPORT"}, {"if", "CONDITIONAL"}, {"else", "CONDITIONAL"}, {"while", "LOOP"}, {"for", "LOOP"},  {"int", "DECLARATION"}, {"byte", "DECLARATION"}, {"shrt", "DECLARATION"}, {"long", "DECLARATION"}, {"doub", "DECLARATION"}, {"str", "DECLARATION"}, {"char", "DECLARATION"}, {"flt", "DECLARATION"}, {"bool", "DECLARATION"}, {"void", "DECLARATION"}, {"class", "DEFINITION"}, {"abstract", "ACCDEF"}, {"interface", "DEFINITION"}, {"null", "NULLVALUE"}, {"return", "RETURN"}, {"true", "BOOLEAN"}, {"false", "BOOLEAN"}, {"local", "ACCESS"},  {"proc", "ACCESS"}, {"priv", "ACCESS"}, {"static", "ACCESS"}};
 		for (String[] i: keywords) {
 			if (i[0].equals(a)) {
 				return i[1];
@@ -28,10 +30,10 @@ public class Lexer {
 		return "Error";
 	}
 	
-	ArrayList<token> lex(String code) {
+	ArrayList<Token> lex(String code) {
 		String a = "";
 		String b = "";
-		ArrayList<token> ts = new ArrayList<>();
+		ArrayList<Token> ts = new ArrayList<>();
 		char i;
 		for (int j = 0; j < code.length(); j++) {
 			i = code.charAt(j);
@@ -51,7 +53,7 @@ public class Lexer {
 					b = "CHAR";
 				}
 				else if (i == ';') {
-					ts.add(new token("ENDOFLINE", ";"));
+					ts.add(new Token("ENDOFLINE", ";"));
 				}
 				else if (!Character.isWhitespace(i)) {
 					a += i;
@@ -64,7 +66,7 @@ public class Lexer {
 					a += i;
 				}
 				else {
-					ts.add(new token(checkKey(a), a));
+					ts.add(new Token(checkKey(a), a));
 					if (ts.get(ts.size()-1).type.equals("IDENTIFIER") && ts.size() > 1) {
 						for (int o = ts.size()-2; o > 0; o--) {
 							if (ts.get(o).type.equals("IDENTIFIER")) {
@@ -90,7 +92,7 @@ public class Lexer {
 					}
 					a = "";
 					if (i == ';') {
-						ts.add(new token("ENDOFLINE", ";"));
+						ts.add(new Token("ENDOFLINE", ";"));
 						if (genericCheck > 0) {
 							genericCheck = 0;
 						}
@@ -113,14 +115,14 @@ public class Lexer {
 					a += i;
 				}
 				else {
-					if (a.length() > 0) {ts.add(new token("NUMBER", a));}
+					if (a.length() > 0) {ts.add(new Token("NUMBER", a));}
 					a = "";
 					if (Character.isLetter(i)) {
 						a += i;
 						b = "LETTER";
 					}
 					else if (i == ';') {
-						ts.add(new token("ENDOFLINE", ";"));
+						ts.add(new Token("ENDOFLINE", ";"));
 						if (genericCheck > 0) {
 							genericCheck = 0;
 						}
@@ -143,7 +145,7 @@ public class Lexer {
 					a += i;
 				}
 				else {
-					ts.add(new token("STRING", a));
+					ts.add(new Token("STRING", a));
 					a = "";
 					b = "";
 				}	
@@ -153,7 +155,7 @@ public class Lexer {
 					a += i;
 				}
 				else {
-					ts.add(new token("CHAR", a));
+					ts.add(new Token("CHAR", a));
 					a = "";
 					b = "";
 				}	
@@ -169,7 +171,7 @@ public class Lexer {
 				}
 				else {
 					
-					ts.add(new token(checkSpec(a), a));
+					ts.add(new Token(checkSpec(a), a));
 					if (ts.get(ts.size()-1).type.equals("Error")) {
 						ts.remove(ts.size()-1);
 					}
@@ -189,10 +191,10 @@ public class Lexer {
 							}
 						}
 						if (flag) {
-							ts.set(genericCheck, new token("LEFTGENERIC", "<"));
-							ts.set(ts.size()-1, new token("RIGHTGENERIC", ">"));
+							ts.set(genericCheck, new Token("LEFTGENERIC", "<"));
+							ts.set(ts.size()-1, new Token("RIGHTGENERIC", ">"));
 							if (!(code.charAt(j) == '(' || ts.get(genericCheck-2).type.equals("DEFINITION"))) {
-								ts.set(genericCheck-1, new token("DECLARATION", ts.get(genericCheck-1).value));
+								ts.set(genericCheck-1, new Token("DECLARATION", ts.get(genericCheck-1).value));
 							}
 						}
 						
@@ -204,7 +206,7 @@ public class Lexer {
 						b = "LETTER";
 					}
 					else if (i == ';') {
-						ts.add(new token("ENDOFLINE", ";"));
+						ts.add(new Token("ENDOFLINE, ";"));
 						if (genericCheck > 0) {
 							genericCheck = 0;
 						}

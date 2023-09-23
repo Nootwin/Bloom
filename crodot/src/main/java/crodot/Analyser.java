@@ -13,6 +13,8 @@ import java.util.Map.Entry;
 
 import org.objectweb.asm.Opcodes;
 
+import crodotStates.TokenState;
+
 
 
 
@@ -369,7 +371,7 @@ public class Analyser {
 
 	public void analyse1(ASTNode tree) {
 		switch(tree.type) {
-		case "IMPORT":
+		case TokenState.IMPORT:
 			if (tree.GetFirstNode().value.charAt(tree.GetFirstNode().value.length()-1) == '*') {
 				accessPackage(tree.GetFirstNode().value.substring(0, tree.GetFirstNode().value.length()-2));
 				
@@ -379,7 +381,7 @@ public class Analyser {
 			}
 			
 			break;
-		case "DEFINITION":
+		case TokenState.DEFINITION:
 			curClass = tree.GetFirstNode().value;
 			results.Classes.put(curClass, new ClassInfo(curClass));
 			if (accAlr) {
@@ -437,7 +439,7 @@ public class Analyser {
 				privacy = 0;
 				accAlr = true;
 			}
-			if ((temp = tree.Grab("PARENT")) != null) {
+			if ((temp = tree.Grab(TokenState.CLASSMODIFIER)) != null) {
 				results.Classes.get(curClass).parent = IfImport(temp.value);
 			}
 			else {
@@ -445,16 +447,16 @@ public class Analyser {
 			}
 			results.Classes.get(curClass).methods.put(curClass, new MethodInfo(curClass, "V"));
 			results.Classes.get(curClass).methods.get(curClass).args.add(new ArgsList<String>());
-			if ((temp = tree.Grab("GENERIC")) != null) {
+			if ((temp = tree.Grab(TokenState.GENERIC)) != null) {
 				results.Classes.get(curClass).willGeneric();
 				for (int i = 0; i < temp.GetNodeSize(); i++) {
 					System.out.println(temp.GetNode(i).type);
 					System.out.println(temp.GetNode(i).value);
 					switch(temp.GetNode(i).type) {
-					case "CLASSNAME":
+					case TokenState.CLASSNAME:
 						results.Classes.get(curClass).genType.put("T" + temp.GetNode(i).value + ";", "Ljava/lang/Object;");
 						break;
-					case "CLASSMODIFIER":
+					case TokenState.CLASSMODIFIER:
 						results.Classes.get(curClass).genType.put(temp.GetNode(i).GetFirstNode().value, temp.GetNode(i).GetNode(1).value);
 						break;
 						
@@ -468,7 +470,7 @@ public class Analyser {
 			}
 
 			break;
-		case "ACCESS":
+		case TokenState.ACCESS:
 				System.out.println(tree.value);
 				switch(tree.value) {
 				case "local":
@@ -517,7 +519,7 @@ public class Analyser {
 				}
 				analyse1(tree.GetFirstNode());
 				break;
-		case "DESCRIPTION":
+		case TokenState.DESCRIPTION:
 			storage = tree.GetFirstNode().value;
 			if (curClass.equals("")) {
 				results.Classes.get("Main").methods.put(storage, new MethodInfo(tree.GetFirstNode().value, strToByte(tree.value)));
@@ -587,7 +589,7 @@ public class Analyser {
 				}
 			}
 			break;
-		case "DECLARATION":
+		case TokenState.DECLARATION:
 			if (!curClass.isBlank()) {
 				String name = tree.GetFirstNode().value;
 				results.Classes.get(curClass).fields.put(name, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), tree.GetNode(1)));
@@ -615,8 +617,8 @@ public class Analyser {
 				}
 			}
 			break;
-		case "END":
-			if (tree.prev.prev.type.equals("DEFINITION")) {
+		case TokenState.END:
+			if (tree.prev.prev.type == TokenState.DEFINITION) {
 				curClass = "";
 			}
 			break;

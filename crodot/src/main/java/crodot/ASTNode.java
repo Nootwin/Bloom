@@ -5,7 +5,7 @@ import java.util.LinkedList;
 public class ASTNode {
 	LinkedList<ASTNode> next = new LinkedList<>();
 	ASTNode prev;
-	String type;
+	byte type;
 	String value;
 	boolean lastCheck = true;
 	
@@ -15,19 +15,19 @@ public class ASTNode {
 	ASTNode(ASTNode p) {
 		this.prev = p;
 	}
-	ASTNode(ASTNode p, String a) {
+	ASTNode(ASTNode p, byte a) {
 		this.prev = p;
 		this.type = a;
 	}
-	ASTNode(ASTNode p, String a, String b) {
+	ASTNode(ASTNode p, byte a, String b) {
 		this.prev = p;
 		this.type = a;
 		this.value = b;
 	}
-	ASTNode(String a) {
+	ASTNode(byte a) {
 		this.type = a;
 	}
-	ASTNode(String a, String b) {
+	ASTNode(byte a, String b) {
 		this.type = a;
 		this.value = b;
 	}
@@ -63,9 +63,9 @@ public class ASTNode {
 	int GetNodeSize() {
 		return next.size();
 	}
-	ASTNode Grab(String Type) {
+	ASTNode Grab(byte Type) {
 		for (int i = 0; i < next.size(); i++) {
-			if (next.get(i).type.equals(Type)) {
+			if (next.get(i).type == Type) {
 				return next.get(i);
 			}
 		}

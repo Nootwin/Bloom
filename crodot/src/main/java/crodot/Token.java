@@ -1,14 +1,14 @@
 package crodot;
 
-public class token {
-	String type;
+public class Token {
+	byte type;
 	String value;
 	
-	token() {
-		this.type = null; this.value = null;
+	Token() {
+		this.type = -2; this.value = null;
 	}
 	
-	token(String a, String b) {
+	Token(byte a, String b) {
 		this.type = a; this.value = b;
 	}
 }

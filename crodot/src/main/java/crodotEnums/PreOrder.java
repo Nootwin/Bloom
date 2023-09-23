@@ -13,8 +13,8 @@ public enum PreOrder {
 	RIGHTGENERIC(6),
 	ENDOFLINE(6);
 	
-	final int priority;
-	final String newValue;
+	public final int priority;
+	public final String newValue;
 	
 	PreOrder(int p, String n) {
 		this.priority = p;

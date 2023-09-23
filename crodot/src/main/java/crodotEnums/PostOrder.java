@@ -34,8 +34,8 @@ public enum PostOrder {
 	
 	
 	
-	final int priority;
-	final String newValue;
+	public final int priority;
+	public final String newValue;
 	
 	PostOrder(int p, String n) {
 		this.priority = p;

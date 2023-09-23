@@ -4,6 +4,8 @@ import java.util.Stack;
 
 import org.objectweb.asm.Opcodes;
 
+import crodotStates.TokenState;
+
 public class Generator {
 	private ASTNode trees;
 	private CodeCreator create;
@@ -31,10 +33,10 @@ public class Generator {
 	
 	public void decision(ASTNode tree) {
 		switch(tree.type) {
-		case "ACCESS":
+		case TokenState.ACCESS:
 			decision(tree.GetFirstNode());
 			break;
-		case "FUN":
+		case TokenState.FUN:
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			if (tree.value.equals("print")) {
 				create.staticField("out", "java/lang/System", "Ljava/io/PrintStream;");
@@ -46,10 +48,10 @@ public class Generator {
 				create.invokeEasy(tree);
 			}
 			break;
-		case "DOT":
+		case TokenState.DOT:
 			create.evalE(tree);
 			break;
-		case "VAR":
+		case TokenState.IDENTIFIER:
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			if (tree.GetNodeSize() > 0) {
 				create.evalE(tree.GetFirstNode(), create.getVar(tree.GetFirstNode().value).type);
@@ -62,7 +64,7 @@ public class Generator {
 				create.loadVar(tree.value, tree);
 			}
 			break;
-		case "ARR":
+		case TokenState.ARR:
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			if (tree.GetNodeSize() > 1) {
 				create.evalE(tree.GetNode(1));
@@ -72,7 +74,7 @@ public class Generator {
 				create.LoadArrIndex(create.loadVar(tree.value, tree), tree, 0);
 			}
 			break;
-		case "DECLARATION":
+		case TokenState.DECLARATION:
 			if (!indentObj.isEmpty() && indentObj.peek().equals("class")) {
 				create.newField(tree.GetFirstNode().value, tree.value, Opcodes.ACC_PUBLIC, tree);
 			}
@@ -80,7 +82,7 @@ public class Generator {
 				wanderingIf = create.accMain(unClass, unMethod, wanderingIf); 
 				if (tree.GetNodeSize() > 1) {
 					create.evalE(tree.GetNode(1), create.strToByte(tree.value));
-					create.newVar(tree.GetFirstNode().value, tree.value, tree.Grab("GENERIC"));
+					create.newVar(tree.GetFirstNode().value, tree.value, tree.Grab(TokenState.GENERIC));
 				}
 				else {
 					create.uninitnewVar(tree.GetFirstNode().value, tree.value);
@@ -89,21 +91,21 @@ public class Generator {
 			}
 			
 			break;
-		case "DEFINITION":
+		case TokenState.DEFINITION:
 			indentObj.push("class");
 			unClass = create.newClass(tree);
-			ASTNode start = tree.Grab("START");
+			ASTNode start = tree.Grab(TokenState.START);
 			for (int i = 0; i < start.GetNodeSize(); i++) {
 				decision(start.GetNode(i));
 			}
 			break;
-		case "DESCRIPTION":
+		case TokenState.DESCRIPTION:
 			wanderingIf = create.accMain(unClass, false, false);
 			indentObj.push("method");
 			unMethod = create.newMethod(tree.GetFirstNode().value, tree );
 			int num = 0;
 			for (int i = 0; i < tree.GetNodeSize(); i++) {
-				if (tree.GetNode(i).type.equals("START")) {
+				if (tree.GetNode(i).type == TokenState.START) {
 					num = i;
 					break;
 				}
@@ -113,7 +115,7 @@ public class Generator {
 			}
 			break;
 		
-		case "CONDITIONAL":
+		case TokenState.CONDITIONAL:
 			wanderingIf = create.accMain(unClass, unMethod, false);
 			if (tree.value.equals("if")) {
 				create.If(tree.GetFirstNode());
@@ -132,7 +134,7 @@ public class Generator {
 			
 			
 			break;
-		case "LOOP":
+		case TokenState.LOOP:
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			if (tree.value.equals("while")) {
 				indentObj.push("while");
@@ -149,10 +151,10 @@ public class Generator {
 				}
 			}
 			break;
-		case "RETURN":
+		case TokenState.RETURN:
 			create.Return(tree.GetFirstNode());
 			break;
-		case "END":
+		case TokenState.END:
 			switch(indentObj.pop()) {
 			case "class":
 				unClass = create.closeClass();

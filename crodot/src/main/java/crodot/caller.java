@@ -3,14 +3,18 @@ package crodot;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Map.Entry;
+
+
 import java.util.Set;
+
+import crodotStates.TokenState;
 
 
 public class caller {
 
-	static void printoken (ArrayList<token> tcode) {
-			for (token i : tcode) {
-			System.out.print(i.type);
+	static void printoken (ArrayList<Token> tcode) {
+			for (Token i : tcode) {
+			System.out.print(TokenStateToString(i.type));
 			System.out.print(' ');
 			System.out.println(i.value);
 			}
@@ -20,7 +24,7 @@ public class caller {
 		for (int z = 0; z < n; z++) {
 			System.out.print('-');
 		}
-		System.out.println(tree.type);
+		System.out.println(TokenStateToString(tree.type));
 		for (ASTNode i : tree.next) {
 			indtree(i, n+1);
 		}
@@ -73,15 +77,79 @@ public class caller {
 		}
 	}
 	
+	public static String TokenStateToString(Byte b) {
+		switch(b) {
+		case TokenState.IMPORT: return "IMPORT";
+		case TokenState.CONDITIONAL: return "CONDITIONAL";
+		case TokenState.LOOP: return  "LOOP";
+		case TokenState.DECLARATION: return  "DECLARATION";
+		case TokenState.DEFINITION: return "DEFINITION"; 
+		case TokenState.ACCDEF: return  "ACCDEF";
+		case TokenState.NULLVALUE: return  "NULLVALUE";
+		case TokenState.RETURN: return "RETURN";  
+		case TokenState.BOOLEAN: return  "BOOLEAN";
+		case TokenState.ACCESS: return  "ACCESS";
+		case TokenState.EQUIVALENCY: return  "EQUIVALENCY";
+		case TokenState.DOT: return  "DOT";
+		case TokenState.GREATERTHAN: return  "GREATERTHAN";
+		case TokenState.LESSTHAN: return  "LESSTHAN";
+		case TokenState.TRUEEQUALS: return  "TRUEEQUALS";
+		case TokenState.TRUEGREATERTHAN: return  "TRUEGREATERTHAN";
+		case TokenState.TRUELESSTHAN: return  "TRUELESSTHAN";
+		case TokenState.NOTEQUALS: return  "NOTEQUALS";
+		case TokenState.ADD: return  "ADD";
+		case TokenState.SUB: return  "SUB";
+		case TokenState.MUL: return  "MUL";
+		case TokenState.DIV: return  "DIV";
+		case TokenState.REM: return  "REM";
+		case TokenState.EXP: return  "EXP";
+		case TokenState.INCREMENT: return  "INCREMENT";
+		case TokenState.DECREMENT: return  "DECREMENT";
+		case TokenState.NOT: return  "NOT";
+		case TokenState.LEFTBRACKET: return  "LEFTBRACKET";
+		case TokenState.RIGHTBRACKET: return  "RIGHTBRACKET";
+		case TokenState.LEFTBRACE: return  "LEFTBRACE";
+		case TokenState.RIGHTBRACE: return  "RIGHTBRACE";
+		case TokenState.LEFTCURLY: return  "LEFTCURLY";
+		case TokenState.RIGHTCURLY: return  "RIGHTCURLY";
+		case TokenState.SEPERATOR: return  "SEPERATOR";
+		case TokenState.INFERRED: return  "INFERRED";
+		case TokenState.CLASSMODIFIER: return  "CLASSMODIFIER";
+		case TokenState.ENDOFLINE: return  "ENDOFLINE";
+		case TokenState.LEFTGENERIC: return  "LEFTGENERIC";
+		case TokenState.RIGHTGENERIC: return  "RIGHTGENERIC";
+		case TokenState.IDENTIFIER: return  "IDENTIFIER";
+		case TokenState.NUMBER: return  "NUMBER";
+		case TokenState.STRING: return  "STRING";
+		case TokenState.CHAR: return  "CHAR";
+		case TokenState.FUN: return  "FUN";
+		case TokenState.ARR: return  "ARR";
+		case TokenState.GENFUN: return  "GENFUN";
+		case TokenState.GENERIC: return  "GENERIC";
+		case TokenState.CLASSNAME: return  "CLASSNAME";
+		case TokenState.DESCRIPTION: return  "DESCRIPTION";
+		case TokenState.START: return  "START";
+		case TokenState.END: return  "END";
+		
+		case TokenState.INTEGER: return  "INTEGER";
+		case TokenState.LONG: return  "LONG";
+		case TokenState.DOUBLE: return  "DOUBLE";
+		case TokenState.CODE: return  "CODE";
+	}
+		return null;
+
+
+	}
+	
 	public static void main(String[] args) {
 		String file = fileReader.ReadFileToString("C:\\Users\\Nolan Murray\\git\\cro\\crodot\\src\\main\\java\\crodot\\main.cr");
 		System.out.println(file);
 		
-		Lexer clone = new Lexer();
-		ArrayList<token> lexed = clone.lex(file);
+		LexerAttempt3 lex2 = new LexerAttempt3(file);
+		ArrayList<Token> lexed = lex2.lex();
 		printoken(lexed);
 		
-		clone = null;
+		lex2 = null;
 		
 		System.out.println("############");
 		

@@ -1,43 +1,44 @@
 package crodotEnums;
 
 import java.util.HashMap;
+import crodotStates.TokenState;
 
 public class LexerKeywords {
-	private HashMap<String, String> s = new HashMap<>();
+	private HashMap<String, Byte> s = new HashMap<>();
 	
-	LexerKeywords() {
-		s.put("=", "EQUIVALENCY");
-		s.put(".", "DOT");
-		s.put(">", "GREATERTHAN");
-		s.put("<", "LESSTHAN");
-		s.put("==", "TRUEEQUALS");
-		s.put(">=", "TRUEGREATERTHAN");
-		s.put("<=", "TRUELESSTHAN");
-		s.put("!=", "NOTEQUALS");
-		s.put("+", "ADD");
-		s.put("-", "SUB");
-		s.put("*", "MUL");
-		s.put("/", "DIV");
-		s.put("%", "REM");
-		s.put("^", "EXP");
-		s.put("++", "INCREMENT");
-		s.put("--", "DECREMENT");
-		s.put("!", "NOT");
-		s.put("(", "LEFTBRACKET");
-		s.put(")", "RIGHTBRACKET");
-		s.put("[", "LEFTBRACE");
-		s.put("]", "RIGHTBRACE");
-		s.put("{", "LEFTCURLY");
-		s.put("}", "RIGHTCURLY");
-		s.put(",", "SEPERATOR");
-		s.put("?", "INFERRED");
-		s.put(":", "CLASSMODIFIER");	
+	public LexerKeywords() {
+		s.put("import", TokenState.IMPORT);
+		s.put("if", TokenState.CONDITIONAL);
+		s.put("else", TokenState.CONDITIONAL);
+		s.put("while", TokenState.LOOP);
+		s.put("for", TokenState.LOOP);
+		s.put("int", TokenState.DECLARATION);
+		s.put("byte", TokenState.DECLARATION);
+		s.put("shrt", TokenState.DECLARATION);
+		s.put("long", TokenState.DECLARATION);
+		s.put("doub", TokenState.DECLARATION);
+		s.put("str", TokenState.DECLARATION);
+		s.put("char", TokenState.DECLARATION);
+		s.put("flt", TokenState.DECLARATION);
+		s.put("bool", TokenState.DECLARATION);
+		s.put("void", TokenState.DECLARATION);
+		s.put("class", TokenState.DEFINITION);
+		s.put("abstract", TokenState.ACCDEF);
+		s.put("interface", TokenState.DEFINITION);
+		s.put("null", TokenState.NULLVALUE);
+		s.put("return", TokenState.RETURN);
+		s.put("true", TokenState.BOOLEAN);
+		s.put("false", TokenState.BOOLEAN);
+		s.put("local", TokenState.ACCESS);
+		s.put("proc", TokenState.ACCESS);
+		s.put("priv", TokenState.ACCESS);
+		s.put("static", TokenState.ACCESS);	
 	}
 	
 	public boolean contains(String key) {
 		return s.containsKey(key);
 	}
-	public String get(String key) {
+	public byte get(String key) {
 		return s.get(key);
 	}
 }

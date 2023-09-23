@@ -23,6 +23,7 @@ import org.objectweb.asm.Opcodes;
 import crodotInsn.CrodotInsn;
 import crodotInsn.CrodotMethod;
 import crodotInsn.CrodotType;
+import crodotStates.TokenState;
 import javassist.bytecode.Opcode;
 
 
@@ -437,10 +438,9 @@ public class CodeCreator {
 	public boolean newClass(ASTNode classnode) {
 		OtherClass = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
 		curName = classnode.GetFirstNode().value;
-		System.out.println( "pop" + curName);
 		cw = OtherClass;
 		ASTNode temp = classnode;
-		if ((temp = classnode.Grab("PARENT")) != null) {
+		if ((temp = classnode.Grab(TokenState.CLASSMODIFIER)) != null) {
 			cw.visit(Opcodes.V19, results.Classes.get(curName).AccessOpcode, curName, signatureWriterClass(classnode), IfImport(temp.value), null);
 		}
 		else {
@@ -591,7 +591,6 @@ public class CodeCreator {
 			case "bool":
 				return "Z";
 			default:
-				System.out.println(curName);
 				if (results.Classes.get(curName).canGeneric() && results.Classes.get(curName).genType.containsKey("T" + str + ";")) {
 					return "T" + str + ";";
 				}
@@ -759,7 +758,6 @@ public class CodeCreator {
 		}
 	}
 	public void newField(String name, String type, int Access, ASTNode node) {
-		System.out.println(name + type + Access);
 		cw.visitField(Access, name, strToByte(type), signatureWriterField(node), null).visitEnd();
 		
 	}
@@ -768,7 +766,6 @@ public class CodeCreator {
 	}
 	
 	public void newVar(String name, String type, ASTNode generic) {
-		System.out.println("FLY: " + name + " " + type);
 		String conf = strToByte(type);
 		castTopStackForVar(conf, popStack());
 		switch(type) {
@@ -807,7 +804,6 @@ public class CodeCreator {
 		VarInfo var;
 		if (varPos.get(varSwitch).containsKey(name)) {
 			var = varPos.get(varSwitch).get(name);
-			System.out.println(var.name + var.type);
 			if (var.type.contains("[")) {
 				mv.visitVarInsn(Opcodes.ALOAD, var.pos);
 				
@@ -846,7 +842,7 @@ public class CodeCreator {
 		}
 		else {
 			ClassInfo info;
-			if (node.prev.type.equals("DOT")) {
+			if (node.prev.type == TokenState.DOT) {
 				String prev = curStack.pop().type;
 				if (prev.startsWith("[")) {
 					mv.visitInsn(Opcodes.ARRAYLENGTH);
@@ -863,7 +859,6 @@ public class CodeCreator {
 			}
 			if (info.fields.containsKey(name)) {
 				mv.visitFieldInsn(Opcodes.GETFIELD, info.name, name, info.fields.get(name).type);
-				System.out.println("DOES THIS EVEN RESOLVE");
 				return info.fields.get(name).type;
 				
 			}
@@ -907,7 +902,7 @@ public class CodeCreator {
 		}
 		else {
 			ClassInfo info;
-			if (node.prev.type.equals("DOT")) {
+			if (node.prev.type == TokenState.DOT) {
 				info = results.Classes.get(curStack.pop().type);
 			}
 			else {
@@ -1529,7 +1524,7 @@ public class CodeCreator {
 
 	public void conditionalE(ASTNode node, Label label) {
 		switch(node.type) {
-		case "BOOL":
+		case TokenState.BOOLEAN:
 			if (node.value.equals("true")) {
 				mv.visitLdcInsn(1);
 			}
@@ -1538,32 +1533,32 @@ public class CodeCreator {
 			}
 			mv.visitJumpInsn(Opcodes.IFNE, label);
 			break;
-		case "TRUEEQUALS":
+		case TokenState.TRUEEQUALS:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			CTrueEquals(label);
 			break;
-		case "NOTEQUALS":
+		case TokenState.NOTEQUALS:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			CNotEquals(label);
 			break;
-		case "TRUEGREATERTHAN":
+		case TokenState.TRUEGREATERTHAN:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			CTrueGreaterThan(label);
 			break;
-		case "TRUELESSTHAN":
+		case TokenState.TRUELESSTHAN:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			CTrueLessThan(label);
 			break;
-		case "GREATERTHAN":
+		case TokenState.GREATERTHAN:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			CGreaterThan(label);
 			break;
-		case "LESSTHAN":
+		case TokenState.LESSTHAN:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			CLessThan(label);
@@ -2336,43 +2331,47 @@ public class CodeCreator {
 	
 	public String evalE(ASTNode node) {
 		switch(node.type) {
-		case "DOT":
+		case TokenState.DOT:
 			evalE(node.GetFirstNode());
 			return evalE(node.GetNode(1));
-		case "FUN":
+		case TokenState.FUN:
 			curStack.push(new StackInfo(invokeEasy(node), mv.size()));
 			if (stackTop().equals("V")) {
 				return popStack();
 			}
 			return stackTop();
-		case "GENFUN":
+		case TokenState.GENFUN:
 			curStack.push(new StackInfo(constWithGen(node), mv.size()));
 			return stackTop();
-		case "VAR":
+		case TokenState.IDENTIFIER:
 			curStack.push(new StackInfo(loadVar(node.value, node), mv.size()));
 			return stackTop();
-		case "ARR":
+		case TokenState.ARR:
 			return curStack.push(new StackInfo(LoadArrIndex(loadVar(node.value, node), node, 0), mv.size())).type;
-		case "BRACE":
+		case TokenState.RIGHTBRACE:
 			return initArray(node);
-		case "C":
+		case TokenState.CHAR:
 			mv.visitLdcInsn(node.value.charAt(0));
 			curStack.push(new StackInfo("C", mv.size()));
 			return "C";
-		case "Ljava/lang/String;":
+		case TokenState.STRING:
 			mv.visitLdcInsn(node.value);
 			curStack.push(new StackInfo("Ljava/lang/String;", mv.size()));
 			return "Ljava/lang/String;";
-		case "I":
+		case TokenState.INTEGER:
 			mv.visitLdcInsn(Integer.parseInt(node.value));
 			curStack.push(new StackInfo("I", mv.size()));
 			return "I";
-		case "D":
+		case TokenState.LONG:
+			mv.visitLdcInsn(Long.parseLong(node.value));
+			curStack.push(new StackInfo("J", mv.size()));
+			return "J";
+		case TokenState.DOUBLE:
 			mv.visitLdcInsn(Double.parseDouble(node.value));
 			curStack.push(new StackInfo("D", mv.size()));
 
 			return "D";
-		case "Z":
+		case TokenState.BOOLEAN:
 			
 			if (node.value.equals("true")) {
 				mv.visitLdcInsn(1);
@@ -2382,32 +2381,32 @@ public class CodeCreator {
 			}
 			curStack.push(new StackInfo("Z", mv.size()));
 			return "Z";
-		case "ADD":
+		case TokenState.ADD:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(EAdd(), mv.size())).type;
-		case "SUB":
+		case TokenState.SUB:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(ESub(), mv.size())).type;
-		case "MUL":
+		case TokenState.MUL:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(EMul(), mv.size())).type;
-		case "DIV":
+		case TokenState.DIV:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(EDiv(), mv.size())).type;
-		case "REM":
+		case TokenState.REM:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(ERem(), mv.size())).type;
-		case "EXP":
+		case TokenState.EXP:
 			break;
 			//to be done
 		}
@@ -2420,34 +2419,34 @@ public class CodeCreator {
 	
 	public String evalE(ASTNode node, String TypeExpected) {
 		switch(node.type) {
-		case "DOT":
+		case TokenState.DOT:
 			evalE(node.GetFirstNode());
 			return evalE(node.GetNode(1));
-		case "FUN":
+		case TokenState.FUN:
 			curStack.push(new StackInfo(invokeEasy(node), mv.size()));
 			if (stackTop().equals("V")) {
 				return popStack();
 			}
 			return stackTop();
-		case "GENFUN":
+		case TokenState.GENFUN:
 			curStack.push(new StackInfo(constWithGen(node), mv.size()));
 			return stackTop();
-		case "VAR":
+		case TokenState.IDENTIFIER:
 			curStack.push(new StackInfo(loadVar(node.value, node), mv.size()));
 			return stackTop();
-		case "ARR":
+		case TokenState.ARR:
 			return curStack.push(new StackInfo(LoadArrIndex(loadVar(node.value, node), node, 0), mv.size())).type;
-		case "BRACE":
+		case TokenState.RIGHTBRACE:
 			return initArray(node);
-		case "C":
+		case TokenState.CHAR:
 			mv.visitLdcInsn(node.value.charAt(0));
 			curStack.push(new StackInfo("C", mv.size()));
 			return "C";
-		case "Ljava/lang/String;":
+		case TokenState.STRING:
 			mv.visitLdcInsn(node.value);
 			curStack.push(new StackInfo("Ljava/lang/String;", mv.size()));
 			return "Ljava/lang/String;";
-		case "I":
+		case TokenState.INTEGER:
 			if (TypeExpected.equals("J") || TypeExpected.equals("Ljava/lang/Long;")) {
 				mv.visitLdcInsn(Long.parseLong(node.value));
 				curStack.push(new StackInfo("J", mv.size()));
@@ -2458,8 +2457,17 @@ public class CodeCreator {
 				curStack.push(new StackInfo("I", mv.size()));
 				return "I";
 			}
+		case TokenState.LONG:
+			if (TypeExpected.equals("I") || TypeExpected.equals("Ljava/lang/Integer;")) {
+				//error
+			}
+			else {
+				mv.visitLdcInsn(Long.parseLong(node.value));
+				curStack.push(new StackInfo("J", mv.size()));
+				return "J";
+			}
 			
-		case "D":
+		case TokenState.DOUBLE:
 			if (TypeExpected.equals("F") || TypeExpected.equals("Ljava/lang/Float;")) {
 				mv.visitLdcInsn(Float.parseFloat(node.value));
 				curStack.push(new StackInfo("F", mv.size()));
@@ -2474,7 +2482,7 @@ public class CodeCreator {
 				return "D";
 			}
 			
-		case "Z":
+		case TokenState.BOOLEAN:
 			
 			if (node.value.equals("true")) {
 				mv.visitLdcInsn(1);
@@ -2484,32 +2492,32 @@ public class CodeCreator {
 			}
 			curStack.push(new StackInfo("Z", mv.size()));
 			return "Z";
-		case "ADD":
+		case TokenState.ADD:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(EAdd(), mv.size())).type;
-		case "SUB":
+		case TokenState.SUB:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(ESub(), mv.size())).type;
-		case "MUL":
+		case TokenState.MUL:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(EMul(), mv.size())).type;
-		case "DIV":
+		case TokenState.DIV:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(EDiv(), mv.size())).type;
-		case "REM":
+		case TokenState.REM:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
 			return curStack.push(new StackInfo(ERem(), mv.size())).type;
-		case "EXP":
+		case TokenState.EXP:
 			break;
 			//to be done
 		}
@@ -6302,13 +6310,13 @@ public class CodeCreator {
 		StringBuilder b = new StringBuilder("<");
 		for (int i = 0; i < gen.GetNodeSize(); i++) {
 			switch(gen.GetNode(i).type) {
-			case "CLASSNAME":
+			case TokenState.CLASSNAME:
 				b.append("T" + IfImport(gen.GetNode(i).value) + ";");
 				break;
-			case "INFERRED":
+			case TokenState.INFERRED:
 				b.append('*');
 				break;
-			case "CLASSMODIFIER":
+			case TokenState.CLASSMODIFIER:
 				if (gen.GetNode(i).value.equals("extends")) {
 					b.append('+');
 				}
@@ -6317,7 +6325,7 @@ public class CodeCreator {
 				}
 				b.append(strToByte(gen.GetNode(i).GetNode(1).value));
 				break;
-			case "GENERIC":
+			case TokenState.GENERIC:
 				b.append(typedGeneric(gen.GetNode(i)));
 				break;
 			}
@@ -6331,12 +6339,12 @@ public class CodeCreator {
 		int i = 1;
 		boolean flag = false;
 		String resultString;
-		while (methodCall.GetNodeSize() > i && !(curGen = methodCall.GetNode(i)).type.equals("START")) {
+		while (methodCall.GetNodeSize() > i && (curGen = methodCall.GetNode(i)).type != TokenState.START) {
 			b.append(resultString = strToByte(curGen.value));
 			if (resultString.startsWith("T")) {
 				flag = true;
 			}
-			if ((curGen = curGen.Grab("GENERIC")) != null) {
+			if ((curGen = curGen.Grab(TokenState.GENERIC)) != null) {
 				b.deleteCharAt(b.length()-1);
 				b.append(typedGeneric(curGen));
 				b.append(";");
@@ -6349,7 +6357,7 @@ public class CodeCreator {
 		
 		if (flag) {
 			b.append(strToByte(methodCall.value));
-			if ((curGen = methodCall.Grab("GENERIC")) != null) {
+			if ((curGen = methodCall.Grab(TokenState.GENERIC)) != null) {
 				b.append(typedGeneric(curGen));
 			}
 			return b.toString();
@@ -6363,17 +6371,17 @@ public class CodeCreator {
 		StringBuilder r = new StringBuilder("<");
 		for (int i = 0; i < curGen.GetNodeSize(); i++) {
 			 switch(curGen.GetNode(i).type) {
-			 case "CLASSNAME":
+			 case TokenState.CLASSNAME:
 				 r.append(curGen.GetNode(i).value);
 				 r.append(":");
 				 r.append("Ljava/lang/Object;");
 				 break;
-			 case "CLASSMODIFIER":
+			 case TokenState.CLASSMODIFIER:
 				 r.append(curGen.GetNode(i).GetFirstNode().value);
 				 r.append(":");
 				 r.append(strToByte(curGen.GetNode(i).GetNode(1).value));
 				 break;
-			 case "GENERIC":
+			 case TokenState.GENERIC:
 				 r.append(parseGeneric(curGen.GetNode(i)));
 				 break;
 			 }
@@ -6386,9 +6394,9 @@ public class CodeCreator {
 		StringBuilder b = new StringBuilder();
 
 
-		if ((curGen = classCall.Grab("GENERIC")) != null) {
+		if ((curGen = classCall.Grab(TokenState.GENERIC)) != null) {
 			b.append(parseGeneric(curGen));
-			if ((curGen = classCall.Grab("PARENT")) != null) {
+			if ((curGen = classCall.Grab(TokenState.CLASSMODIFIER)) != null) {
 				b.append(strToByte(curGen.value));
 			}
 			else {
@@ -6408,7 +6416,7 @@ public class CodeCreator {
 		StringBuilder b = new StringBuilder();
 
 		b.append(strToByte(fieldCall.value));
-		if ((curGen = fieldCall.Grab("GENERIC")) != null) {
+		if ((curGen = fieldCall.Grab(TokenState.GENERIC)) != null) {
 			b.append(parseGeneric(curGen));
 			flag = true;
 		}
@@ -6429,7 +6437,6 @@ public class CodeCreator {
 				mv.visitMultiANewArrayInsn(valType = strToByte(node.value), node.GetNodeSize());
 				return valType;
 			}
-			System.out.println(node.value + " jk");
 			evalE(node.GetFirstNode(), "I");
 			switch(node.value) {
 			case "bool":
@@ -6495,7 +6502,6 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.LALOAD);
 				return "J";
 			default:
-				System.out.println(type + "sup");
 				mv.visitInsn(Opcodes.AALOAD);
 				return type.replaceFirst("\\[", "");
 			}
@@ -6507,7 +6513,7 @@ public class CodeCreator {
 		ASTNode temp = node;
 		int slack = -2;
 		String valType;
-		while (temp.type != "DECLARATION" && temp.type != "DESCRIPTION") {
+		while (temp.type != TokenState.DECLARATION && temp.type != TokenState.DESCRIPTION) {
 			temp = temp.prev;
 			slack += 2;
 		}
@@ -6631,7 +6637,7 @@ public class CodeCreator {
 	public String invokeEasy(ASTNode tree) {
 		
 		String[] Methodinfo;
-		if (tree.prev.type.equals("DOT")) {
+		if (tree.prev.type == TokenState.DOT) {
 			LinkedHashMap<String, String> genType = null;
 			top = curStack.pop().type;
 			if (top.startsWith("[")) {
