@@ -2,11 +2,22 @@ package crodot;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.LinkedList;
+import java.util.Queue;
 
 
-public class fileReader {
+public class CrodotFileReader {
+	private String fileName;
+	private Queue<Integer> lineNum;
+	private LinkedList<String> fileContents;
+	
+	CrodotFileReader(String fileName) {
+		this.fileName = fileName;
+		this.lineNum = new LinkedList<>();
+		this.fileContents = new LinkedList<>();
+	}
 
-    static String ReadFileToString(String fileName) {
+    String ReadFileToString() {
 
         String fileContent = "";
 
@@ -26,13 +37,24 @@ public class fileReader {
                 			fileContent += line + ";";
                 			break;
                 		}
+                		fileContents.add(line);
+                		lineNum.add(fileContent.length());
                 	}
                 }
+                
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
         fileContent += " ";
         return fileContent;
+    }
+    
+    Queue<Integer> getLineNumbers() {
+    	return lineNum;
+    }
+    
+    LinkedList<String> getContentList() {
+    	return fileContents;
     }
 }

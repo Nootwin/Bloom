@@ -17,12 +17,16 @@ public class Parser {
 	private ArrayList<Token> code;
 	private final String[][] preOrder = {{"DOT", "DOT"}, {"IDENTIFIER", "VAR"}, {"RIGHTBRACKET", "BRACKET"}};
 	private final String[][] postOrder = {{"SEPERATOR", "SEP"}, {"TRUEEQUALS", "TRUEEQUALS"}, {"NOTEQUALS", "NOTEQUALS"}, {"TRUEGREATERTHAN", "TRUEGREATERTHAN"}, {"TRUELESSTHAN", "TRUELESSTHAN"}, {"LESSTHAN", "LESSTHAN"}, {"GREATERTHAN", "GREATERTHAN"}, {"ADD", "ADD"}, {"SUB", "SUB"}, {"MUL", "MUL"}, {"DIV", "DIV"}, {"REM", "REM"}, {"EXP", "EXP"}, {"DOT", "DOT"}, {"IDENTIFIER", "VAR"}, {"DECLARATION", "VAR"}, {"NUMBER", "NUM"}, {"STRING", "Ljava/lang/String;"}, {"CHAR", "C"}, {"BOOLEAN", "Z"}, {"RIGHTBRACE", "BRACE"}, {"RIGHTBRACKET", "BRACKET"}};
+	private int lineNum;
+	private ErrorThrower err;
 	
 	int Start = 0;
-	Parser(ArrayList<Token> code) {
-		parent = new ASTNode(TokenState.CODE, "Code");
+	Parser(ArrayList<Token> code, ErrorThrower err) {
+		parent = new ASTNode(TokenState.CODE, "Code", -1);
 		cur = parent;
 		this.code = code;
+		this.lineNum = 0;
+		this.err = err;
 	}
 	
 	//inclusive inclusive
@@ -31,7 +35,7 @@ public class Parser {
 			final int two = end-1;
 			
 			if (code.get(two).type == TokenState.CLASSMODIFIER) {
-				tree.SetNode(new ASTNode(tree, TokenState.CLASSMODIFIER, code.get(two).value));
+				tree.SetNode(new ASTNode(tree, TokenState.CLASSMODIFIER, code.get(two).value, lineNum));
 				genericSolve(tree.GetFirstNode(), start, start);
 				genericSolve(tree.GetFirstNode(), end, end);
 				return tree;
@@ -39,10 +43,10 @@ public class Parser {
 		}
 		else if (end - start == 0) {
 			if (code.get(start).type == TokenState.IDENTIFIER) {
-				tree.SetNode(new ASTNode(tree, TokenState.CLASSNAME, code.get(start).value));
+				tree.SetNode(new ASTNode(tree, TokenState.CLASSNAME, code.get(start).value, lineNum));
 			}
 			else if (code.get(start).type == TokenState.INFERRED) {
-				tree.SetNode(new ASTNode(tree, TokenState.CLASSNAME, "?"));
+				tree.SetNode(new ASTNode(tree, TokenState.CLASSNAME, "?", lineNum));
 			}
 			return tree;
 		}
@@ -113,8 +117,8 @@ public class Parser {
 		
 		switch (tree.type) {
 		case TokenState.DOT:
-			tree.SetNode(preSolve(new ASTNode(tree), start-1, place-1));
-			tree.SetNode(preSolve(new ASTNode(tree), place, end));
+			tree.SetNode(preSolve(new ASTNode(tree, lineNum), start-1, place-1));
+			tree.SetNode(preSolve(new ASTNode(tree, lineNum), place, end));
 			return tree;
 		case TokenState.FUN:
 			brackets = 0;
@@ -124,7 +128,7 @@ public class Parser {
 				}
 				else if (code.get(i).type == TokenState.RIGHTBRACKET) {
 					if (brackets == 0) {
-						tree.SetNode(postSolve(new ASTNode(tree), place+1, i-1));
+						tree.SetNode(postSolve(new ASTNode(tree, lineNum), place+1, i-1));
 					}
 					else {
 						brackets--;
@@ -144,7 +148,7 @@ public class Parser {
 				}
 				else if (code.get(i).type == TokenState.RIGHTBRACE) {
 					if (brackets == 0) {
-						tree.SetNode(postSolve(new ASTNode(tree), place+1, i-1));
+						tree.SetNode(postSolve(new ASTNode(tree, lineNum), place+1, i-1));
 					}
 					else {
 						brackets--;
@@ -247,12 +251,12 @@ public class Parser {
 		
 		switch (tree.type) {
 		case TokenState.ADD, TokenState.SUB, TokenState.MUL, TokenState.DIV, TokenState.REM, TokenState.EXP, TokenState.SEPERATOR, TokenState.TRUEEQUALS, TokenState.NOTEQUALS, TokenState.TRUEGREATERTHAN, TokenState.TRUELESSTHAN, TokenState.GREATERTHAN, TokenState.LESSTHAN:
-			tree.SetNode(postSolve(new ASTNode(tree), start, place-1));
-			tree.SetNode(postSolve(new ASTNode(tree), place, end));
+			tree.SetNode(postSolve(new ASTNode(tree, lineNum), start, place-1));
+			tree.SetNode(postSolve(new ASTNode(tree, lineNum), place, end));
 			return tree;
 		case TokenState.DOT:
-			tree.SetNode(preSolve(new ASTNode(tree), start-1, place-1));
-			tree.SetNode(preSolve(new ASTNode(tree), place, end));
+			tree.SetNode(preSolve(new ASTNode(tree, lineNum), start-1, place-1));
+			tree.SetNode(preSolve(new ASTNode(tree, lineNum), place, end));
 			return tree;
 		case TokenState.GENFUN:
 			brackets = 0;
@@ -263,7 +267,7 @@ public class Parser {
 				}
 				else if (code.get(i).type == TokenState.RIGHTGENERIC) {
 					if (brackets == 0) {	
-						tree.SetNode(genericSolve(new ASTNode(tree, TokenState.GENERIC, "<>"), place+2, i-1));
+						tree.SetNode(genericSolve(new ASTNode(tree, TokenState.GENERIC, "<>", lineNum), place+2, i-1));
 						dis = i;
 					}
 					else {
@@ -279,7 +283,7 @@ public class Parser {
 				}
 				else if (code.get(i).type == TokenState.RIGHTBRACKET) {
 					if (brackets == 0) {	
-						tree.SetNode(postSolve(new ASTNode(tree), dis+1, i-1));
+						tree.SetNode(postSolve(new ASTNode(tree, lineNum), dis+1, i-1));
 					}
 					else {
 						brackets--;
@@ -297,7 +301,7 @@ public class Parser {
 				}
 				else if (code.get(i).type == TokenState.RIGHTBRACKET) {
 					if (brackets == 0) {	
-						tree.SetNode(postSolve(new ASTNode(tree), place+1, i-1));
+						tree.SetNode(postSolve(new ASTNode(tree, lineNum), place+1, i-1));
 					}
 					else {
 						brackets--;
@@ -314,7 +318,7 @@ public class Parser {
 			int next = start+1;
 			for (int i = start+2; i < end+1; i++) {
 				if (code.get(i).type == TokenState.SEPERATOR && brackets2 == 0) {
-					tree.SetNode(postSolve(new ASTNode(tree), next, i-1));
+					tree.SetNode(postSolve(new ASTNode(tree, lineNum), next, i-1));
 					next = i;
 				}
 				else if (code.get(i).type == TokenState.LEFTBRACE) {
@@ -325,7 +329,7 @@ public class Parser {
 				}
 				
 			}
-			tree.SetNode(postSolve(new ASTNode(tree), next, end-1));
+			tree.SetNode(postSolve(new ASTNode(tree, lineNum), next, end-1));
 			return tree;
 		case TokenState.ARR:
 			brackets = 0;
@@ -335,7 +339,7 @@ public class Parser {
 				}
 				else if (code.get(i).type == TokenState.RIGHTBRACE) {
 					if (brackets == 0) {
-						tree.SetNode(postSolve(new ASTNode(tree), place+1, i-1));
+						tree.SetNode(postSolve(new ASTNode(tree, lineNum), place+1, i-1));
 						if (code.get(i+1).type != TokenState.LEFTBRACE) {
 							return tree; 
 						}
@@ -353,7 +357,7 @@ public class Parser {
 			if (tree.value.contains(".")) {
 				tree.type = TokenState.DOUBLE;
 			}
-			else if (Long.parseLong(tree.value) > Integer.MAX_VALUE && Long.parseLong(tree.value) < Integer.MIN_VALUE ) {
+			else if (Long.parseLong(tree.value) > Integer.MAX_VALUE || Long.parseLong(tree.value) < Integer.MIN_VALUE ) {
 				tree.type = TokenState.LONG;
 			}
 			else {
@@ -381,30 +385,30 @@ public class Parser {
 			}
 			return decide(p);
 		case TokenState.IMPORT:
-			cur.SetNode(new ASTNode(cur, TokenState.IMPORT, "import"));
+			cur.SetNode(new ASTNode(cur, TokenState.IMPORT, "import", lineNum));
 			cur = cur.GetLastNode();
-			cur.SetNode(new ASTNode(cur, TokenState.STRING, code.get(p+1).value));
+			cur.SetNode(new ASTNode(cur, TokenState.STRING, code.get(p+1).value, lineNum));
 			return p+2;
 		case TokenState.RETURN:
-			cur.SetNode(new ASTNode(cur, TokenState.RETURN, code.get(p).value));
+			cur.SetNode(new ASTNode(cur, TokenState.RETURN, code.get(p).value, lineNum));
 			cur = cur.GetLastNode();
 			for (int i = p; i < code.size(); i++) {
 				if (code.get(i).type == TokenState.ENDOFLINE || code.get(i).type == TokenState.LEFTCURLY) {
-					cur.SetNode(postSolve(new ASTNode(cur), p, i-1));
+					cur.SetNode(postSolve(new ASTNode(cur, lineNum), p, i-1));
 					return i;
 				}
 			}
 		case TokenState.ACCESS:
-			cur.SetNode(new ASTNode(cur, TokenState.ACCESS, code.get(p).value));
+			cur.SetNode(new ASTNode(cur, TokenState.ACCESS, code.get(p).value, lineNum));
 			cur = cur.GetLastNode();
 			return p+1;
 		case TokenState.LEFTGENERIC:
-			cur.SetNode(new ASTNode(cur, TokenState.GENERIC, "<>"));
+			cur.SetNode(new ASTNode(cur, TokenState.GENERIC, "<>", lineNum));
 			cur = cur.GetLastNode();
 			brackets = 0;
 			for (int i = p+1; i < code.size(); i++) {
 				if (code.get(i).type == TokenState.SEPERATOR) {
-					cur.SetNode(postSolve(new ASTNode(cur), p, i-1));
+					cur.SetNode(postSolve(new ASTNode(cur, lineNum), p, i-1));
 				}
 				else if (code.get(i).type == TokenState.RIGHTGENERIC) {
 					if (brackets == 0) {
@@ -421,18 +425,18 @@ public class Parser {
 			}
 			return p+1;
 		case TokenState.DEFINITION:
-			cur.SetNode(new ASTNode(cur, TokenState.DEFINITION, code.get(p).value));
+			cur.SetNode(new ASTNode(cur, TokenState.DEFINITION, code.get(p).value, lineNum));
 			cur = cur.GetLastNode();
 			fieldCounter = 0;
 			return p+1;
 		case TokenState.CLASSMODIFIER:
-			cur.SetNode(new ASTNode(cur, TokenState.CLASSMODIFIER, code.get(p+1).value));
+			cur.SetNode(new ASTNode(cur, TokenState.CLASSMODIFIER, code.get(p+1).value, lineNum));
 			return p+2;
 		case TokenState.DECLARATION:
 			int lev;
 			ASTNode node = null;
 			if (code.get(p+1).type == TokenState.LEFTGENERIC) {
-				node = new ASTNode(TokenState.GENERIC, "<>");
+				node = new ASTNode(TokenState.GENERIC, "<>", lineNum);
 				lev = p+2;
 				for (int i = p+2; i < code.size(); i++) {
 					if (code.get(i).type == TokenState.SEPERATOR) {
@@ -450,7 +454,7 @@ public class Parser {
 				lev = 0;
 			}
 			if (code.get(p+lev+2).value.equals("(")) {
-				cur.SetNode(new ASTNode(cur, TokenState.DESCRIPTION, code.get(p).value));
+				cur.SetNode(new ASTNode(cur, TokenState.DESCRIPTION, code.get(p).value, lineNum));
 				cur = cur.GetLastNode();
 				if (lev > 0) {
 					node.prev = cur;
@@ -463,7 +467,7 @@ public class Parser {
 						genIndex = i+1;
 						break;
 					case TokenState.RIGHTGENERIC:
-						cur.SetLast(genericSolve(new ASTNode(cur, TokenState.GENERIC, "<>"), genIndex, i-1));
+						cur.SetLast(genericSolve(new ASTNode(cur, TokenState.GENERIC, "<>", lineNum), genIndex, i-1));
 						genIndex = 0;
 						break;
 					case TokenState.RIGHTBRACKET:
@@ -472,13 +476,13 @@ public class Parser {
 						}
 						if (code.get(i+1).type != TokenState.LEFTCURLY) {
 							
-							cur.SetLast(new ASTNode(cur, TokenState.START, ";"));
+							cur.SetLast(new ASTNode(cur, TokenState.START, ";", lineNum));
 							cur = cur.GetLastNode();
 						}
 						return i+1;
 					case TokenState.DECLARATION:
 						if (genIndex == 0) {
-							cur.SetNode(new ASTNode(cur, TokenState.DECLARATION, code.get(i).value));
+							cur.SetNode(new ASTNode(cur, TokenState.DECLARATION, code.get(i).value, lineNum));
 							cur = cur.GetLastRealNode();
 						}
 						break;
@@ -487,7 +491,7 @@ public class Parser {
 						break;
 					case TokenState.IDENTIFIER:
 						if (genIndex == 0) {
-							cur.SetNode(new ASTNode(cur, TokenState.IDENTIFIER, code.get(i).value));
+							cur.SetNode(new ASTNode(cur, TokenState.IDENTIFIER, code.get(i).value, lineNum));
 						}
 						break;
 					case TokenState.SEPERATOR:
@@ -500,7 +504,7 @@ public class Parser {
 				
 			}
 			else if ((!Objects.isNull(cur.prev)) && cur.prev.type == TokenState.DEFINITION) {
-					cur.PlaceNode(new ASTNode(cur, TokenState.DECLARATION, code.get(p).value), fieldCounter);
+					cur.PlaceNode(new ASTNode(cur, TokenState.DECLARATION, code.get(p).value, lineNum), fieldCounter);
 					cur = cur.GetNode(fieldCounter);
 					if (lev > 0) {
 						cur.SetLast(node);
@@ -508,7 +512,7 @@ public class Parser {
 					fieldCounter++;
 			}
 			else {
-				cur.SetNode(new ASTNode(cur, TokenState.DECLARATION, code.get(p).value));
+				cur.SetNode(new ASTNode(cur, TokenState.DECLARATION, code.get(p).value, lineNum));
 				cur = cur.GetLastNode();
 				if (lev > 0) {
 					cur.SetLast(node);
@@ -528,48 +532,48 @@ public class Parser {
 		case TokenState.EQUIVALENCY :
 			for (int i = p; i < code.size(); i++) {
 				if (code.get(i).type == TokenState.ENDOFLINE || code.get(i).type == TokenState.LEFTCURLY) {
-					cur.SetNode(postSolve(new ASTNode(cur), p, i-1));
+					cur.SetNode(postSolve(new ASTNode(cur, lineNum), p, i-1));
 					return i;
 				}
 			}
 			break;
 		case TokenState.CONDITIONAL:
 			if (code.get(p).value.equals("if")) {
-				cur.SetNode(new ASTNode(cur, TokenState.CONDITIONAL, "if"));
+				cur.SetNode(new ASTNode(cur, TokenState.CONDITIONAL, "if", lineNum));
 				cur = cur.GetLastNode();
 				for (int i = p; i < code.size(); i++) {
 					if (code.get(i).type == TokenState.LEFTCURLY) {
-						cur.SetNode(postSolve(new ASTNode(cur), p, i-1));
+						cur.SetNode(postSolve(new ASTNode(cur, lineNum), p, i-1));
 						return i;
 					}
 				}
 			}
 			else {
-				cur.SetNode(new ASTNode(cur, TokenState.CONDITIONAL, "else"));
+				cur.SetNode(new ASTNode(cur, TokenState.CONDITIONAL, "else", lineNum));
 				cur = cur.GetLastNode();
 				return p+1;
 			}
 			
 		case TokenState.LOOP:
 			if (code.get(p).value.equals("while")) {
-				cur.SetNode(new ASTNode(cur, TokenState.LOOP, "while"));
+				cur.SetNode(new ASTNode(cur, TokenState.LOOP, "while", lineNum));
 				cur = cur.GetLastNode();
 				for (int i = p; i < code.size(); i++) {
 					if (code.get(i).type == TokenState.LEFTCURLY) {
-						cur.SetNode(postSolve(new ASTNode(cur), p-1, i-1));
+						cur.SetNode(postSolve(new ASTNode(cur, lineNum), p-1, i-1));
 						return i;
 					}
 				}
 			}
 			else {
-				cur.SetNode(new ASTNode(cur, TokenState.LOOP, "for"));
+				cur.SetNode(new ASTNode(cur, TokenState.LOOP, "for", lineNum));
 				cur = cur.GetLastNode();
 				boolean flag = false;
 				int sec = 0;
 				for (int i = p; i < code.size(); i++) {
 					if (code.get(i).type == TokenState.ENDOFLINE) {
 						if(flag) {
-							cur.SetNode(postSolve(new ASTNode(cur), decide(decide(decide(decide(p+1))))-1, i-1));
+							cur.SetNode(postSolve(new ASTNode(cur, lineNum), decide(decide(decide(decide(p+1))))-1, i-1));
 							sec = i;
 							;
 						}
@@ -579,7 +583,7 @@ public class Parser {
 						
 					}
 					else if (flag && code.get(i).type == TokenState.LEFTCURLY) {
-						cur.SetNode(postSolve(new ASTNode(cur), sec, i-1));
+						cur.SetNode(postSolve(new ASTNode(cur, lineNum), sec, i-1));
 						return i;
 					}
 				}
@@ -591,12 +595,12 @@ public class Parser {
 		case TokenState.IDENTIFIER:
 			switch (cur.type) {
 			case TokenState.DECLARATION, TokenState.DEFINITION, TokenState.DESCRIPTION:
-				cur.SetNode(new ASTNode(cur, TokenState.IDENTIFIER, code.get(p).value));
+				cur.SetNode(new ASTNode(cur, TokenState.IDENTIFIER, code.get(p).value, lineNum));
 				return p+1;
 			default:
 				for (int i = p; i < code.size(); i++) {
 					if (code.get(i).type == TokenState.ENDOFLINE || code.get(i).type == TokenState.LEFTCURLY || code.get(i).type == TokenState.EQUIVALENCY) {
-						cur.SetNode(preSolve(new ASTNode(cur), p-1, i-1));
+						cur.SetNode(preSolve(new ASTNode(cur, lineNum), p-1, i-1));
 						cur = cur.GetLastNode();
 						return i;
 					}
@@ -605,7 +609,7 @@ public class Parser {
 			}
 		case TokenState.ENDOFLINE:
 			if (cur.type == TokenState.START && cur.value.equals(";")) {
-				cur.SetNode(new ASTNode(cur, TokenState.END, "}"));
+				cur.SetNode(new ASTNode(cur, TokenState.END, "}", lineNum));
 				cur = cur.prev.prev;
 				if (cur.type == TokenState.ACCESS) {
 					cur = cur.prev;
@@ -622,17 +626,19 @@ public class Parser {
 			if (!(cur.type == TokenState.LOOP || cur.type == TokenState.CONDITIONAL || cur.type == TokenState.DEFINITION || cur.type == TokenState.DESCRIPTION)) {
 				cur = cur.prev;
 			}
-			cur.SetLast(new ASTNode(cur, TokenState.START, "{"));
+			cur.SetLast(new ASTNode(cur, TokenState.START, "{", lineNum));
 			cur = cur.GetLastNode();
 			return p+1;
 		case TokenState.RIGHTCURLY:
-			cur.SetNode(new ASTNode(cur, TokenState.END, "}"));
+			cur.SetNode(new ASTNode(cur, TokenState.END, "}", lineNum));
 			cur = cur.prev.prev;
 			if (cur.type == TokenState.ACCESS) {
 				cur = cur.prev;
 			}
 			return p+1;
-	
+		case TokenState.NEXTLINE:
+			lineNum++;
+			return p+1;
 		}
 	return -69;
 	}

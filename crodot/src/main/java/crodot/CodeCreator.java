@@ -23,6 +23,7 @@ import org.objectweb.asm.Opcodes;
 import crodotInsn.CrodotInsn;
 import crodotInsn.CrodotMethod;
 import crodotInsn.CrodotType;
+import crodotInsn.CrodotVar;
 import crodotStates.TokenState;
 import javassist.bytecode.Opcode;
 
@@ -42,11 +43,12 @@ public class CodeCreator {
 	private int size;
 	private int[] varCount = new int[2];
 	private Stack<StackInfo> curStack;
+	private ErrorThrower err;
 	AnaResults results;
 	private ArrayList<Integer> getAllRangeStackPos;
 	
 	
-	CodeCreator(AnaResults results) {
+	CodeCreator(AnaResults results, ErrorThrower err) {
 		labelList = new Stack<>();
 		curStack = new Stack<>();
 		varSwitch = 1;
@@ -54,6 +56,7 @@ public class CodeCreator {
 		varPos.add(null);
 		varPos.add(null);
 		this.results = results;
+		this.err = err;
 		
 		MainClass = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
 		MainClass.visit(Opcodes.V19, Opcodes.ACC_PUBLIC, "Main", null, "java/lang/Object", null);
@@ -313,7 +316,7 @@ public class CodeCreator {
 			case "Ljava/lang/Object;":
 				break;
 			default:
-				if (str.type.contains("[") || results.Classes.get(curName).genType.containsKey(str.type)) {
+				if (str.type.contains("[") || results.Classes.get(curName).canGeneric() && results.Classes.get(curName).genType.containsKey(str.type)) {
 					list.add("Ljava/lang/Object;");
 					break;
 				}
@@ -795,8 +798,36 @@ public class CodeCreator {
 		if (conf.equals("J") || conf.equals("D")) {
 			varCount[varSwitch]++;
 		}
+	}
+	
+	public void newUnknownVar(String name) {
+		String type = popStack();
+		switch(type) {
+		case "I", "Z", "bool", "byte", "shrt", "int", "char":
+			mv.visitVarInsn(Opcodes.ISTORE, varCount[varSwitch]);
+			break;
+		case "long", "J":
+			mv.visitVarInsn(Opcodes.LSTORE, varCount[varSwitch]);
+			break;
+		case "doub", "D":
+			mv.visitVarInsn(Opcodes.DSTORE, varCount[varSwitch]);
+			break;
+		case "flt":
+			mv.visitVarInsn(Opcodes.FSTORE, varCount[varSwitch]);
+			break;
+		default:
+			mv.visitVarInsn(Opcodes.ASTORE, varCount[varSwitch]);
+			break;
+		}
 		
-
+		varPos.get(varSwitch).put(name, new VarInfo(name, type, varCount[varSwitch]++));
+		if (type.equals("J") || type.equals("D")) {
+			varCount[varSwitch]++;
+		}
+	}
+	
+	public String peekStack() {
+		return curStack.peek().type;
 	}
 	
 	public String loadVar(String name, ASTNode node) {
@@ -865,9 +896,6 @@ public class CodeCreator {
 			else {
 				return "<ARRDEF>";
 			}
-			
-			
-			
 		}
 		
 	
@@ -900,18 +928,26 @@ public class CodeCreator {
 			
 			
 		}
+		
 		else {
+			StackInfo s = curStack.pop();
 			ClassInfo info;
 			if (node.prev.type == TokenState.DOT) {
 				info = results.Classes.get(curStack.pop().type);
 			}
 			else {
 				info = results.Classes.get(curName);
-				mv.visitVarInsn(Opcodes.ALOAD, 0);
-				mv.visitInsn(Opcodes.SWAP);
+				mv.insert(new CrodotVar(Opcodes.ALOAD, s.posInQueue-1), size);
 			}
 			
-			mv.visitFieldInsn(Opcodes.PUTFIELD, info.name, name, strToByte(info.fields.get(name).type));
+			if (info.fields.containsKey(name)) {
+				castTopStackForVar(info.fields.get(name).type ,s.type);
+				mv.visitFieldInsn(Opcodes.PUTFIELD, info.name, name, strToByte(info.fields.get(name).type));
+			}
+			else {
+				//err
+			}
+			
 			
 		}
 	}
@@ -2345,6 +2381,9 @@ public class CodeCreator {
 			return stackTop();
 		case TokenState.IDENTIFIER:
 			curStack.push(new StackInfo(loadVar(node.value, node), mv.size()));
+			if (curStack.peek().type.equals("<ARRDEF>")) {
+				err.UnknownIdentifierException(node.line, node.value);
+			}
 			return stackTop();
 		case TokenState.ARR:
 			return curStack.push(new StackInfo(LoadArrIndex(loadVar(node.value, node), node, 0), mv.size())).type;
@@ -2433,6 +2472,9 @@ public class CodeCreator {
 			return stackTop();
 		case TokenState.IDENTIFIER:
 			curStack.push(new StackInfo(loadVar(node.value, node), mv.size()));
+			if (curStack.peek().type.equals("<ARRDEF>")) {
+				err.UnknownIdentifierException(node.line, node.value);
+			}
 			return stackTop();
 		case TokenState.ARR:
 			return curStack.push(new StackInfo(LoadArrIndex(loadVar(node.value, node), node, 0), mv.size())).type;

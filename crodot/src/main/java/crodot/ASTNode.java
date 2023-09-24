@@ -7,29 +7,36 @@ public class ASTNode {
 	ASTNode prev;
 	byte type;
 	String value;
+	int line;
 	boolean lastCheck = true;
 	
-	ASTNode() {
+	ASTNode(int line) {
 		this.prev = null;
+		this.line = line;
 	}
-	ASTNode(ASTNode p) {
+	ASTNode(ASTNode p, int line) {
 		this.prev = p;
+		this.line = line;
 	}
-	ASTNode(ASTNode p, byte a) {
+	ASTNode(ASTNode p, byte a, int line) {
 		this.prev = p;
 		this.type = a;
+		this.line = line;
 	}
-	ASTNode(ASTNode p, byte a, String b) {
+	ASTNode(ASTNode p, byte a, String b, int line) {
 		this.prev = p;
 		this.type = a;
 		this.value = b;
+		this.line = line;
 	}
-	ASTNode(byte a) {
+	ASTNode(byte a, int line) {
 		this.type = a;
+		this.line = line;
 	}
-	ASTNode(byte a, String b) {
+	ASTNode(byte a, String b, int line) {
 		this.type = a;
 		this.value = b;
+		this.line = line;
 	}
 		
 	void SetNode(ASTNode a) {

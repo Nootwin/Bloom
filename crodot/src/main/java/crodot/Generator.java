@@ -14,10 +14,12 @@ public class Generator {
 	private boolean unMethod = true;
 	private boolean wanderingIf = false;
 	private Stack<String> indentObj = new Stack<>();
+	private ErrorThrower err;
 	
-	Generator(ASTNode trees, AnaResults results) {
+	Generator(ASTNode trees, AnaResults results, ErrorThrower err) {
 		this.trees = trees;
-		this.create = new CodeCreator(results);
+		this.err = err;
+		this.create = new CodeCreator(results, err);
 	}
 	
 	public void createSys(String jarName) {
@@ -54,8 +56,16 @@ public class Generator {
 		case TokenState.IDENTIFIER:
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			if (tree.GetNodeSize() > 0) {
-				create.evalE(tree.GetFirstNode(), create.getVar(tree.GetFirstNode().value).type);
-				create.storeVar(tree.value, tree);
+				if (create.getVar(null) != null) {
+					create.evalE(tree.GetFirstNode(), create.getVar(tree.GetFirstNode().value).type);
+					create.storeVar(tree.value, tree);
+				}
+				else {
+					create.evalE(tree.GetFirstNode());
+					
+					create.newUnknownVar(tree.value);
+				}
+				
 			}
 			else if (create.isClass(tree.value)) {
 				create.pushStack(tree.value);

@@ -1,6 +1,7 @@
 package crodot;
 
 import java.util.ArrayList;
+import java.util.Queue;
 import java.util.Stack;
 
 import crodotEnums.LexerKeywords;
@@ -14,13 +15,20 @@ public class LexerAttempt3 {
 	private LexerSpecials specials;
 	private ArrayList<Token> tokens;
 	private Stack<Integer> genCounter;
+	private ErrorThrower err;
+	private Queue<Integer> lineNum;
+	private int linePop;
 	
-	LexerAttempt3(String code) {
+	LexerAttempt3(String code, ErrorThrower err) {
 		this.code = code;
+		this.err = err;
+		this.lineNum = err.getLineNumbers();
 		this.words = new LexerKeywords();
 		this.specials = new LexerSpecials();
 		this.tokens = new ArrayList<>(code.length() >> 1);
 		this.genCounter = new Stack<>();
+		this.linePop = 1;
+
 	}
 	
 	public void addSpecial(String value) {
@@ -256,21 +264,36 @@ public class LexerAttempt3 {
 			case LexerStatus.STRING:
 				if (c != '"') {
 					b.append(c);
+					if (lineNum.peek() == i) {
+						err.NeverEndingStringException(linePop);
+					}
 				}
 				else {
 					tokens.add(new Token(TokenState.STRING, b.toString()));
 					b.setLength(0);
 					status = LexerStatus.NULL;
+					
 				}
 			case LexerStatus.CHAR:
 				if (c != '\'') {
 					b.append(c);
+					if (b.length() > 1) {
+						err.CharToBigException(linePop);
+					}
+					if (lineNum.peek() == i) {
+						err.NeverEndingStringException(linePop);
+					}
 				}
 				else {
 					tokens.add(new Token(TokenState.CHAR, b.toString()));
 					b.setLength(0);
 					status = LexerStatus.NULL;
 				}
+			}
+			if (lineNum.peek() == i) {
+				lineNum.poll();
+				linePop++;
+				tokens.add(new Token(TokenState.NEXTLINE, ""));
 			}
 			
 		}

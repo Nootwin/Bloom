@@ -134,6 +134,7 @@ public class caller {
 		case TokenState.INTEGER: return  "INTEGER";
 		case TokenState.LONG: return  "LONG";
 		case TokenState.DOUBLE: return  "DOUBLE";
+		case TokenState.NEXTLINE: return "NEXTLINE";
 		case TokenState.CODE: return  "CODE";
 	}
 		return null;
@@ -142,10 +143,13 @@ public class caller {
 	}
 	
 	public static void main(String[] args) {
-		String file = fileReader.ReadFileToString("C:\\Users\\Nolan Murray\\git\\cro\\crodot\\src\\main\\java\\crodot\\main.cr");
+		CrodotFileReader fileReader = new CrodotFileReader("C:\\Users\\Nolan Murray\\git\\cro\\crodot\\src\\main\\java\\crodot\\main.cr");
+		String file = fileReader.ReadFileToString();
 		System.out.println(file);
 		
-		LexerAttempt3 lex2 = new LexerAttempt3(file);
+		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList());
+		
+		LexerAttempt3 lex2 = new LexerAttempt3(file, err);
 		ArrayList<Token> lexed = lex2.lex();
 		printoken(lexed);
 		
@@ -153,7 +157,7 @@ public class caller {
 		
 		System.out.println("############");
 		
-		Parser newparse = new Parser(lexed);
+		Parser newparse = new Parser(lexed, err);
 		
 		lexed = null;
 		
@@ -166,7 +170,7 @@ public class caller {
 		AnaResults results = analy.start();
 		
 		printhelpfulresults(results);
-		Generator gen = new Generator(parsed, results );
+		Generator gen = new Generator(parsed, results, err );
 		
 		gen.createSys(null);
 		
