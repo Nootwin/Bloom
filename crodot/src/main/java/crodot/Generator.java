@@ -15,11 +15,23 @@ public class Generator {
 	private boolean wanderingIf = false;
 	private Stack<String> indentObj = new Stack<>();
 	private ErrorThrower err;
+	private int line;
 	
-	Generator(ASTNode trees, AnaResults results, ErrorThrower err) {
+	Generator(ASTNode trees, AnaResults results, ErrorThrower err, String sourceFile) {
 		this.trees = trees;
 		this.err = err;
-		this.create = new CodeCreator(results, err);
+		this.create = new CodeCreator(results, err, sourceFile);
+		line = -3;
+	}
+	
+	public void lineCheck(ASTNode tree) {
+		System.out.println("C" + tree.line);
+		if (create.mv != null && tree.line > line) {
+			System.out.println("onylinohio");
+			line = tree.line;
+			create.addLineNumber(tree.line);
+			
+		}
 	}
 	
 	public void createSys(String jarName) {
@@ -34,16 +46,25 @@ public class Generator {
 	}
 	
 	public void decision(ASTNode tree) {
+		System.out.println("C" + tree.line);
+		if (create.mv != null && tree.line > line) {
+			System.out.println("onylinohio");
+			line = tree.line;
+			create.addLineNumber(tree.line);
+			
+		}
 		switch(tree.type) {
 		case TokenState.ACCESS:
 			decision(tree.GetFirstNode());
 			break;
 		case TokenState.FUN:
+			
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
+			lineCheck(tree);
 			if (tree.value.equals("print")) {
 				create.staticField("out", "java/lang/System", "Ljava/io/PrintStream;");
 				create.evalE(tree.GetLastNode());
-				printType = create.checkMethodvStack("println", "PrintStream", 1);
+				printType = create.checkMethodvStack("println", "PrintStream", 1, tree.line);
 				create.invokePublic("println", "java/io/PrintStream", printType[0] + "V");
 			}
 			else {
@@ -54,7 +75,9 @@ public class Generator {
 			create.evalE(tree);
 			break;
 		case TokenState.IDENTIFIER:
+			
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
+			lineCheck(tree);
 			if (tree.GetNodeSize() > 0) {
 				if (create.getVar(null) != null) {
 					create.evalE(tree.GetFirstNode(), create.getVar(tree.GetFirstNode().value).type);
@@ -75,7 +98,9 @@ public class Generator {
 			}
 			break;
 		case TokenState.ARR:
+			
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
+			lineCheck(tree);
 			if (tree.GetNodeSize() > 1) {
 				create.evalE(tree.GetNode(1));
 				create.storeArr(tree.value, tree, tree.GetNode(1));
@@ -89,13 +114,15 @@ public class Generator {
 				create.newField(tree.GetFirstNode().value, tree.value, Opcodes.ACC_PUBLIC, tree);
 			}
 			else {
+				
 				wanderingIf = create.accMain(unClass, unMethod, wanderingIf); 
+				lineCheck(tree);
 				if (tree.GetNodeSize() > 1) {
 					create.evalE(tree.GetNode(1), create.strToByte(tree.value));
-					create.newVar(tree.GetFirstNode().value, tree.value, tree.Grab(TokenState.GENERIC));
+					create.newVar(tree.GetFirstNode().value, tree.value, tree.Grab(TokenState.GENERIC), tree.line);
 				}
 				else {
-					create.uninitnewVar(tree.GetFirstNode().value, tree.value);
+					create.uninitnewVar(tree.GetFirstNode().value, tree.value, tree.line);
 				}
 				
 			}
@@ -111,6 +138,7 @@ public class Generator {
 			break;
 		case TokenState.DESCRIPTION:
 			wanderingIf = create.accMain(unClass, false, false);
+			lineCheck(tree);
 			indentObj.push("method");
 			unMethod = create.newMethod(tree.GetFirstNode().value, tree );
 			int num = 0;
@@ -127,6 +155,7 @@ public class Generator {
 		
 		case TokenState.CONDITIONAL:
 			wanderingIf = create.accMain(unClass, unMethod, false);
+			lineCheck(tree);
 			if (tree.value.equals("if")) {
 				create.If(tree.GetFirstNode());
 				indentObj.push("if");
@@ -146,6 +175,7 @@ public class Generator {
 			break;
 		case TokenState.LOOP:
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
+			lineCheck(tree);
 			if (tree.value.equals("while")) {
 				indentObj.push("while");
 				create.While(tree.GetFirstNode());

@@ -27,7 +27,7 @@ public class LexerAttempt3 {
 		this.specials = new LexerSpecials();
 		this.tokens = new ArrayList<>(code.length() >> 1);
 		this.genCounter = new Stack<>();
-		this.linePop = 1;
+		this.linePop = 0;
 
 	}
 	
@@ -274,6 +274,7 @@ public class LexerAttempt3 {
 					status = LexerStatus.NULL;
 					
 				}
+				break;
 			case LexerStatus.CHAR:
 				if (c != '\'') {
 					b.append(c);
@@ -289,8 +290,10 @@ public class LexerAttempt3 {
 					b.setLength(0);
 					status = LexerStatus.NULL;
 				}
+				break;
 			}
-			if (lineNum.peek() == i) {
+			
+			while (!lineNum.isEmpty() && lineNum.peek() == i) {
 				lineNum.poll();
 				linePop++;
 				tokens.add(new Token(TokenState.NEXTLINE, ""));

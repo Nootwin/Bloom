@@ -170,7 +170,7 @@ public class caller {
 		AnaResults results = analy.start();
 		
 		printhelpfulresults(results);
-		Generator gen = new Generator(parsed, results, err );
+		Generator gen = new Generator(parsed, results, err, "main.cr");
 		
 		gen.createSys(null);
 		

@@ -37,10 +37,12 @@ public class CrodotFileReader {
                 			fileContent += line + ";";
                 			break;
                 		}
-                		fileContents.add(line);
-                		lineNum.add(fileContent.length());
+                		
                 	}
+                	
                 }
+                fileContents.add(line);
+        		lineNum.add(fileContent.length());
                 
             }
         } catch (IOException e) {

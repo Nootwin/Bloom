@@ -6,6 +6,7 @@ import java.util.Queue;
 import org.objectweb.asm.Attribute;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
 
 import crodotInsn.CrodotAttribute;
 import crodotInsn.CrodotCode;
@@ -17,6 +18,7 @@ import crodotInsn.CrodotInt;
 import crodotInsn.CrodotJump;
 import crodotInsn.CrodotLabel;
 import crodotInsn.CrodotLdc;
+import crodotInsn.CrodotLine;
 import crodotInsn.CrodotLookupSwitch;
 import crodotInsn.CrodotMaxs;
 import crodotInsn.CrodotMethod;
@@ -91,6 +93,9 @@ public class CrodotMethodVisitor{
 	public void visitVarInsn(int opcode, int varIndex) {
 		codes.add(new CrodotVar(opcode, varIndex));
 	}
+	public void visitLineInsn(int line, Label l) {
+		codes.add(new CrodotLine(line, l));
+	}
 	public void visitEnd() {
 		this.apply();
 		mv.visitEnd();
@@ -102,6 +107,7 @@ public class CrodotMethodVisitor{
 	public CrodotCode pop() {
 		return codes.removeLast();
 	}
+	
 	
 	public void apply() {
 		CrodotCode c;

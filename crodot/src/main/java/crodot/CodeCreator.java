@@ -29,6 +29,7 @@ import javassist.bytecode.Opcode;
 
 
 public class CodeCreator {
+	private String sourceFile;
 	private String curName;
 	private String returnType;
 	private ClassWriter cw;
@@ -48,7 +49,7 @@ public class CodeCreator {
 	private ArrayList<Integer> getAllRangeStackPos;
 	
 	
-	CodeCreator(AnaResults results, ErrorThrower err) {
+	CodeCreator(AnaResults results, ErrorThrower err, String sourceFile) {
 		labelList = new Stack<>();
 		curStack = new Stack<>();
 		varSwitch = 1;
@@ -57,9 +58,11 @@ public class CodeCreator {
 		varPos.add(null);
 		this.results = results;
 		this.err = err;
+		this.sourceFile = sourceFile;
 		
 		MainClass = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
 		MainClass.visit(Opcodes.V19, Opcodes.ACC_PUBLIC, "Main", null, "java/lang/Object", null);
+		MainClass.visitSource(sourceFile, null);
 		
 		MainMethod = new CrodotMethodVisitor(MainClass.visitMethod(Opcodes.ACC_PUBLIC + Opcodes.ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null));
 		varPos.set(0, new HashMap<>());
@@ -74,12 +77,15 @@ public class CodeCreator {
 			mv.visitInsn(Opcodes.POP);
 		}
 	}
-	public String[] checkMethodvStack(String Methodname, String Classname, int size) {
+	public String[] checkMethodvStack(String Methodname, String Classname, int size, int LineNum) {
 		int[] priority = null;
 		int[] tempPrio;
 		boolean flag;
 		int indexOf;
 		MethodInfo info = results.Classes.get(Classname).methods.get(Methodname);
+		if (info == null) {
+			err.UnknownMethodException(LineNum, Methodname, Classname);
+		}
 		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
 		if ((!Objects.isNull(info))) {
 			for (int i = 0; i < info.args.size(); i++) {
@@ -170,8 +176,11 @@ public class CodeCreator {
 	
 	
 
-	public String[] checkMethodvStack(String Methodname, String Classname, int size, LinkedHashMap<String, String> genTypeInfo) {
+	public String[] checkMethodvStack(String Methodname, String Classname, int size, LinkedHashMap<String, String> genTypeInfo, int lineNum) {
 		MethodInfo info = results.Classes.get(Classname).methods.get(Methodname);
+		if (info == null) {
+			err.UnknownMethodException(lineNum, Methodname, Classname);
+		}
 		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
 		int[] priority = null;
 		int[] tempPrio;
@@ -228,7 +237,7 @@ public class CodeCreator {
 								priority = tempPrio;
 							}
 							else if (turner == 0) {
-								//error ambiguous
+								err.AmbiguousMethodCallExecption(lineNum, Methodname);
 							}
 						}
 						
@@ -450,6 +459,7 @@ public class CodeCreator {
 			cw.visit(Opcodes.V19, results.Classes.get(curName).AccessOpcode, curName, signatureWriterClass(classnode), "java/lang/Object", null);
 		}
 		
+		cw.visitSource(sourceFile, null);
 		return false;
 	}
 	
@@ -472,6 +482,7 @@ public class CodeCreator {
 		mv.visitMaxs(0, 0);
 
 		mv.visitEnd();
+		mv = null;
 		return true;
 	}
 	
@@ -764,27 +775,31 @@ public class CodeCreator {
 		cw.visitField(Access, name, strToByte(type), signatureWriterField(node), null).visitEnd();
 		
 	}
-	public void uninitnewVar(String name, String type) {
+	public void uninitnewVar(String name, String type, int line) {
+		if (!results.Classes.containsKey(IfImport(type))) {
+			err.UnknownClassException(line, name, type);
+		}
 		varPos.get(varSwitch).put(name, new VarInfo(name, type, varCount[varSwitch]++));
 	}
 	
-	public void newVar(String name, String type, ASTNode generic) {
+	public void newVar(String name, String type, ASTNode generic, int lineNum) {
 		String conf = strToByte(type);
-		castTopStackForVar(conf, popStack());
-		switch(type) {
-		case "I", "Z", "bool", "byte", "shrt", "int", "char":
+		castTopStackForVar(conf, popStack(), lineNum);
+		switch(conf) {
+		case "I", "Z", "B", "S", "C":
 			mv.visitVarInsn(Opcodes.ISTORE, varCount[varSwitch]);
 			break;
-		case "long", "J":
+		case "J":
 			mv.visitVarInsn(Opcodes.LSTORE, varCount[varSwitch]);
 			break;
-		case "doub", "D":
+		case "D":
 			mv.visitVarInsn(Opcodes.DSTORE, varCount[varSwitch]);
 			break;
-		case "flt":
+		case "F":
 			mv.visitVarInsn(Opcodes.FSTORE, varCount[varSwitch]);
 			break;
 		default:
+			System.out.println(type);
 			mv.visitVarInsn(Opcodes.ASTORE, varCount[varSwitch]);
 			break;
 		}
@@ -897,9 +912,12 @@ public class CodeCreator {
 				return "<ARRDEF>";
 			}
 		}
-		
+	}
 	
-		
+	void addLineNumber(int line) {
+		Label l = new Label();
+		mv.visitLabel(l);
+		mv.visitLineInsn(line, l);
 	}
 	
 	public void storeVar(String name, ASTNode node) {
@@ -907,7 +925,7 @@ public class CodeCreator {
 		VarInfo var;
 		if (varPos.get(varSwitch).containsKey(name)) {
 			var = varPos.get(varSwitch).get(name);
-			castTopStackForVar(var.type, popStack());
+			castTopStackForVar(var.type, popStack(), node.line);
 			switch(var.type) {
 			case "I", "Z", "bool", "byte", "shrt", "int", "char":
 				mv.visitVarInsn(Opcodes.ISTORE, var.pos);
@@ -928,6 +946,7 @@ public class CodeCreator {
 			
 			
 		}
+
 		
 		else {
 			StackInfo s = curStack.pop();
@@ -941,7 +960,7 @@ public class CodeCreator {
 			}
 			
 			if (info.fields.containsKey(name)) {
-				castTopStackForVar(info.fields.get(name).type ,s.type);
+				castTopStackForVar(info.fields.get(name).type ,s.type, node.line);
 				mv.visitFieldInsn(Opcodes.PUTFIELD, info.name, name, strToByte(info.fields.get(name).type));
 			}
 			else {
@@ -953,7 +972,7 @@ public class CodeCreator {
 	}
 	
 	
-	private void castTopStackForVar(String targetStack, String curStack) {
+	private void castTopStackForVar(String targetStack, String curStack, int lineNum) {
 		switch(targetStack) {
 		case "Z":
 			switch(curStack) {
@@ -963,7 +982,7 @@ public class CodeCreator {
 				mv.visitMethodInsn(Opcode.INVOKEVIRTUAL, "java/lang/Boolean", "booleanValue", "()Z", false);
 				return;
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -975,7 +994,7 @@ public class CodeCreator {
 			case "Ljava/lang/Boolean;":
 				return;
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -1017,7 +1036,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.D2I);
 				return;
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -1068,7 +1087,7 @@ public class CodeCreator {
 				mv.visitMethodInsn(Opcode.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
 				return;
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -1119,7 +1138,7 @@ public class CodeCreator {
 				mv.visitMethodInsn(Opcode.INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
 				return;
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -1170,7 +1189,7 @@ public class CodeCreator {
 				mv.visitMethodInsn(Opcode.INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
 				return;
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -1221,7 +1240,7 @@ public class CodeCreator {
 				mv.visitMethodInsn(Opcode.INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
 				return;
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -1267,7 +1286,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.D2L);
 				return;
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -1321,7 +1340,7 @@ public class CodeCreator {
 				mv.visitMethodInsn(Opcode.INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
 				return;
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -1367,7 +1386,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.D2F);
 				return;
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -1421,7 +1440,7 @@ public class CodeCreator {
 				mv.visitMethodInsn(Opcode.INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
 				return;
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -1467,7 +1486,7 @@ public class CodeCreator {
 				mv.visitMethodInsn(Opcode.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false);
 				return;
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -1522,7 +1541,7 @@ public class CodeCreator {
 				return;
 			
 			default:
-				//error
+				err.IncompatibleTypeException(lineNum, targetStack, curStack);
 				break;
 			
 			}
@@ -2424,27 +2443,27 @@ public class CodeCreator {
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(EAdd(), mv.size())).type;
+			return curStack.push(new StackInfo(EAdd(node.line), mv.size())).type;
 		case TokenState.SUB:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(ESub(), mv.size())).type;
+			return curStack.push(new StackInfo(ESub(node.line), mv.size())).type;
 		case TokenState.MUL:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(EMul(), mv.size())).type;
+			return curStack.push(new StackInfo(EMul(node.line), mv.size())).type;
 		case TokenState.DIV:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(EDiv(), mv.size())).type;
+			return curStack.push(new StackInfo(EDiv(node.line), mv.size())).type;
 		case TokenState.REM:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(ERem(), mv.size())).type;
+			return curStack.push(new StackInfo(ERem(node.line), mv.size())).type;
 		case TokenState.EXP:
 			break;
 			//to be done
@@ -2538,27 +2557,27 @@ public class CodeCreator {
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(EAdd(), mv.size())).type;
+			return curStack.push(new StackInfo(EAdd(node.line), mv.size())).type;
 		case TokenState.SUB:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(ESub(), mv.size())).type;
+			return curStack.push(new StackInfo(ESub(node.line), mv.size())).type;
 		case TokenState.MUL:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(EMul(), mv.size())).type;
+			return curStack.push(new StackInfo(EMul(node.line), mv.size())).type;
 		case TokenState.DIV:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(EDiv(), mv.size())).type;
+			return curStack.push(new StackInfo(EDiv(node.line), mv.size())).type;
 		case TokenState.REM:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(ERem(), mv.size())).type;
+			return curStack.push(new StackInfo(ERem(node.line), mv.size())).type;
 		case TokenState.EXP:
 			break;
 			//to be done
@@ -2568,9 +2587,9 @@ public class CodeCreator {
 	}
 
 
-	private String EAdd() {
-		StackInfo s1 = curStack.pop();
+	private String EAdd(int line) {
 		StackInfo s2 = curStack.pop();
+		StackInfo s1 = curStack.pop();
 		
 		
 		switch(s1.type) {
@@ -2578,35 +2597,37 @@ public class CodeCreator {
 			switch(s2.type) {
 			case "Ljava/lang/String;":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
 				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(Z)Ljava/lang/String;", false), s1.posInQueue-1);
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			default:
-				//throw error
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 			break;
 		case "Ljava/lang/Boolean;":
 			switch(s2.type) {
 			case "Ljava/lang/String;":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Boolean", "toString", "()Ljava/lang/String;", false), s1.posInQueue-1);
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			default:
-				//throw error
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 		case "B", "S", "I", "C":
@@ -2659,17 +2680,19 @@ public class CodeCreator {
 				return "D";
 			case "Ljava/lang/String;":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(" + s1.type + ")Ljava/lang/String;", false), s1.posInQueue-1);
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(I)Ljava/lang/String;", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -2733,17 +2756,18 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/Object;)V", false), s1.posInQueue-1);
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -2807,17 +2831,18 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/Object;)V", false), s1.posInQueue-1);
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -2881,17 +2906,18 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/Object;)V", false), s1.posInQueue-1);
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -2955,17 +2981,18 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/Object;)V", false), s1.posInQueue-1);
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -3023,18 +3050,20 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
 				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(J)Ljava/lang/String;", false), s1.posInQueue-1);
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				
 				return "Ljava/lang/String;";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -3111,7 +3140,7 @@ public class CodeCreator {
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -3168,17 +3197,19 @@ public class CodeCreator {
 				return "D";
 			case "Ljava/lang/String;":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
 				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(F)Ljava/lang/String;", false), s1.posInQueue-1);
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -3244,18 +3275,18 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -3312,17 +3343,19 @@ public class CodeCreator {
 				return "D";
 			case "Ljava/lang/String;":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
 				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(D)Ljava/lang/String;", false), s1.posInQueue-1);
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -3389,159 +3422,168 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-		
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 				break;
 			}
 			break;
 		case "Ljava/lang/String;":
 			switch(s2.type) {
 			case "B":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(B)Ljava/lang/String;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			case "S":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(S)Ljava/lang/String;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 				
 			case "C":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(C)Ljava/lang/String;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 				
 			case "I":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(I)Ljava/lang/String;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				
 				return "Ljava/lang/String;";
 			case "J":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				
 				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(J)Ljava/lang/String;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 				
 			case "F":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(F)Ljava/lang/String;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				
+
 				return "Ljava/lang/String;";
 				
 			case "D":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				
-				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(D)Ljava/lang/String;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				
+			
 				return "Ljava/lang/String;";
 				
-			case "Ljava/lang/String":
-				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				
+			case "Ljava/lang/String;":
 				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			default:
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				
 				//one before other for efficiency as it pushes
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				return "Ljava/lang/String;";
 			}
 			
 		default:
 			if (s2.type.equals("Ljava/lang/String;")) {
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
-				
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, s2.type.substring(1, s2.type.length()-1), "toString()", "()Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
 				
 				//one before other for efficiency as it pushes
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				//one before other for efficiency as it pushes
+				//one before other for efficiency as it pushes
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
 				
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
-
 				
 				return "Ljava/lang/String;";
 			}
 			else {
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
 			}
 		}
 		return null;
 		
 	}
-	private String ESub() {
+	private String ESub(int line) {
 
 		StackInfo s1 = curStack.pop();
 		StackInfo s2 = curStack.pop();
@@ -3596,7 +3638,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -3660,7 +3702,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -3724,7 +3766,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -3788,7 +3830,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -3852,7 +3894,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -3910,7 +3952,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -3977,7 +4019,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4033,7 +4075,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4099,7 +4141,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4155,7 +4197,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4222,18 +4264,18 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
 				break;
 			}
 			break;
 		default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
 			
 		}
 		return null;
 		
 	}
-	private String EMul() {
+	private String EMul(int line) {
 
 		StackInfo s1 = curStack.pop();
 		StackInfo s2 = curStack.pop();
@@ -4288,7 +4330,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4352,7 +4394,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4416,7 +4458,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4480,7 +4522,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4544,7 +4586,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4602,7 +4644,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4669,7 +4711,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4725,7 +4767,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4791,7 +4833,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4847,7 +4889,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -4914,18 +4956,18 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
 				break;
 			}
 			break;
 		default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
 			
 		}
 		return null;
 		
 	}
-	private String EDiv() {
+	private String EDiv(int line) {
 		StackInfo s1 = curStack.pop();
 		StackInfo s2 = curStack.pop();
 		
@@ -4979,7 +5021,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5043,7 +5085,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5107,7 +5149,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5171,7 +5213,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5235,7 +5277,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5293,7 +5335,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5360,7 +5402,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5416,7 +5458,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5482,7 +5524,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5538,7 +5580,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5605,18 +5647,18 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
 				break;
 			}
 			break;
 		default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
 			
 		}
 		return null;
 		
 	}
-	private String ERem() {
+	private String ERem(int line) {
 		StackInfo s1 = curStack.pop();
 		StackInfo s2 = curStack.pop();
 		
@@ -5670,7 +5712,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5734,7 +5776,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5798,7 +5840,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5862,7 +5904,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5926,7 +5968,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -5984,7 +6026,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -6051,7 +6093,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -6107,7 +6149,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -6173,7 +6215,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -6229,7 +6271,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
 				break;
 			}
 			break;
@@ -6296,12 +6338,12 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
 				break;
 			}
 			break;
 		default:
-				//error;
+				err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
 			
 		}
 		return null;
@@ -6512,7 +6554,7 @@ public class CodeCreator {
 			}
 		}
 		evalE(node.GetNode(MatrixIndex));
-		castTopStackForVar("I", popStack());
+		castTopStackForVar("I", popStack(), node.line);
 		if (node.GetNodeSize() - MatrixIndex > 1) {
 			mv.visitInsn(Opcodes.AALOAD);
 			return LoadArrIndex(type.replaceFirst("\\[", ""), node, MatrixIndex + 1);
@@ -6619,7 +6661,7 @@ public class CodeCreator {
 			mv.visitInsn(Opcodes.DUP);
 			mv.visitLdcInsn(i);
 			evalE(node.GetNode(i));
-			castTopStackForVar(valType, popStack());
+			castTopStackForVar(valType, popStack(), node.line);
 			mv.visitInsn(enCapCode);
 		}
 		
@@ -6664,7 +6706,7 @@ public class CodeCreator {
 		labelList.add(new Label());
 		labelList.add(new Label());
 		evalE(tree.GetFirstNode().GetNode(1));
-		newVar(tree.GetFirstNode().GetFirstNode().value, tree.GetFirstNode().value, null);
+		newVar(tree.GetFirstNode().GetFirstNode().value, tree.GetFirstNode().value, null, tree.line);
 		conditionalE(tree.GetNode(1), labelList.peek());
 		mv.visitLabel(labelList.peek());
 	}
@@ -6692,10 +6734,10 @@ public class CodeCreator {
 			size = curStack.size();
 			if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
 			if (genType == null) {
-				Methodinfo = checkMethodvStack(tree.value, top, curStack.size()-size);
+				Methodinfo = checkMethodvStack(tree.value, top, curStack.size()-size, tree.line);
 			}
 			else {
-				Methodinfo = checkMethodvStack(tree.value, top, curStack.size()-size, genType);
+				Methodinfo = checkMethodvStack(tree.value, top, curStack.size()-size, genType, tree.line);
 			}
 			if (Methodinfo[2].contains("static")) {
 				invokeStatic(tree.value, IfImport(top), Methodinfo[0] + Methodinfo[1]);	
@@ -6713,7 +6755,7 @@ public class CodeCreator {
 		else {
 			size = curStack.size();
 			if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
-			Methodinfo = checkMethodvStack(tree.value, curName, curStack.size()-size);
+			Methodinfo = checkMethodvStack(tree.value, curName, curStack.size()-size, tree.line);
 			if (Methodinfo[2].contains("static")) {
 				invokeStatic(tree.value, curName, Methodinfo[0] + Methodinfo[1]);
 			}
