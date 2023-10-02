@@ -9,6 +9,7 @@ import java.lang.reflect.*;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
+import java.util.Queue;
 import java.util.Map.Entry;
 
 import org.objectweb.asm.Opcodes;
@@ -27,6 +28,7 @@ public class Analyser {
 	private int privacy = 0;
 	private StringBuilder privacyString = new StringBuilder();
 	private boolean accAlr;
+	private ClassFetcher fetcher = new ClassFetcher();
 	
 	Analyser(ASTNode trees) {
 		this.trees = trees;
@@ -40,17 +42,18 @@ public class Analyser {
 		curClass = "";
 		accessPackage("java.lang");
 		Import("java.io.PrintStream");
-		for (int i = 0; i < trees.GetNodeSize(); i++) {
-			analyse1(trees.GetNode(i));
-		}
-		File dir = new File(System.getProperty("user.dir"));
+		
+		File dir = new File(System.getProperty("user.dir") + "\\");
 		File[] directoryListing = dir.listFiles();
 		for (File child : directoryListing) {
 			if (child.getName().endsWith(".class")) {
-				Import(child.getName().substring(0, child.getName().length()-6));
-				System.out.println(child.getName().substring(0, child.getName().length()-6));
+				Import(child.getName().substring(0, child.getName().indexOf('.')));
 			}
 		}
+		for (int i = 0; i < trees.GetNodeSize(); i++) {
+			analyse1(trees.GetNode(i));
+		}
+
 		  
 		
 		try {
@@ -659,10 +662,16 @@ public class Analyser {
 	}
 	private void Import(String classID) {
 		String nameHolder;
+		Class<?> id;
 		try {
+			id = Class.forName(classID);
+		} catch (ClassNotFoundException e1) {
+			// TODO Auto-generated catch block
+			id = fetcher.fetchNonJava(System.getProperty("user.dir") + "\\" + classID + ".class", classID);
+		}
 			ArgsList<String> args = new ArgsList<>();
 			String name;
-			Class<?> id = Class.forName(classID);
+			
 			name = id.getSimpleName();
 			HashMap<String, String> genTypeMethod = null;
 			
@@ -752,10 +761,6 @@ public class Analyser {
 				info.fields.put(f.getName(), new FieldInfo(f.getName(), strToByte(f.getGenericType().getTypeName())));
 				info.fields.get(f.getName()).AccessModifiers = Modifier.toString(f.getModifiers());
 			}	
-		} catch (ClassNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
 
 		
 		

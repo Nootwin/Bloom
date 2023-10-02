@@ -1,10 +1,10 @@
 package crodot;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Map.Entry;
-
-
+import crodot.ArgInfo;
 import java.util.Set;
 
 import crodotStates.TokenState;
@@ -141,13 +141,13 @@ public class caller {
 
 
 	}
-	
 	public static void main(String[] args) {
+		
 		CrodotFileReader fileReader = new CrodotFileReader("C:\\Users\\Nolan Murray\\git\\cro\\crodot\\src\\main\\java\\crodot\\main.cr");
 		String file = fileReader.ReadFileToString();
 		System.out.println(file);
 		
-		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList());
+		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList(), "main.cr");
 		
 		LexerAttempt3 lex2 = new LexerAttempt3(file, err);
 		ArrayList<Token> lexed = lex2.lex();
