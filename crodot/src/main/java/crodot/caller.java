@@ -143,11 +143,11 @@ public class caller {
 	}
 	public static void main(String[] args) {
 		
-		CrodotFileReader fileReader = new CrodotFileReader("C:\\Users\\Nolan Murray\\git\\cro\\crodot\\src\\main\\java\\crodot\\main.cr");
+		CrodotFileReader fileReader = new CrodotFileReader("C:\\Users\\Nolan Murray\\git\\cro\\crodot\\bloomers\\main.bl");
 		String file = fileReader.ReadFileToString();
 		System.out.println(file);
 		
-		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList(), "main.cr");
+		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList(), "main.bl");
 		
 		LexerAttempt3 lex2 = new LexerAttempt3(file, err);
 		ArrayList<Token> lexed = lex2.lex();
@@ -170,7 +170,7 @@ public class caller {
 		AnaResults results = analy.start();
 		
 		printhelpfulresults(results);
-		Generator gen = new Generator(parsed, results, err, "main.cr");
+		Generator gen = new Generator(parsed, results, err, "main.bl");
 		
 		gen.createSys(null);
 		
