@@ -45,6 +45,7 @@ public class CodeCreator {
 	private int[] varCount = new int[2];
 	private Stack<StackInfo> curStack;
 	private ErrorThrower err;
+	private ASTNode storeEvalE;
 	AnaResults results;
 	private ArrayList<Integer> getAllRangeStackPos;
 	
@@ -115,7 +116,7 @@ public class CodeCreator {
 								priority = tempPrio;
 							}
 							else if (turner == 0) {
-								//error ambiguous
+								err.AmbiguousMethodCallExecption(LineNum, Methodname);
 							}
 						}
 					}	
@@ -133,7 +134,7 @@ public class CodeCreator {
 				
 			
 		}
-		System.out.println("damn daniel" + Methodname + curName);
+		System.out.println("damn daniel " + Methodname + "   " + curName + "   "+ Classname +"   "+ stacks.toString());
 		return null;
 	}
 	
@@ -247,10 +248,10 @@ public class CodeCreator {
 			if (priority != null) {
 				addCastings(info.args.get(priority[0]), stacks);
 				if (results.Classes.get(curName).canGeneric()) {
-					return new String[] {replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(curName).genType) , results.Classes.get(Classname).genType), replaceAll(replaceAll(info.returnType.get(priority[0]), results.Classes.get(curName).genType), results.Classes.get(Classname).genType), info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0]))};
+					return new String[] {replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(curName).genType) , results.Classes.get(Classname).genType), replaceReturn(replaceReturn(info.returnType.get(priority[0]), results.Classes.get(curName).genType), results.Classes.get(Classname).genType), info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0])), };
 				}
 				else {
-					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(Classname).genType), replaceAll(info.returnType.get(priority[0]), results.Classes.get(Classname).genType), info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0]))};
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(Classname).genType), replaceReturn(info.returnType.get(priority[0]), results.Classes.get(Classname).genType), info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0]))};
 				}
 			}
 				
@@ -260,6 +261,16 @@ public class CodeCreator {
 		return null;
 	}
 	
+	private String replaceReturn(String returner, LinkedHashMap<String, String> genPairs) {
+		for (Entry<String, String> entry : genPairs.entrySet()) {
+			if (returner.equals(entry.getKey())) {
+				return entry.getValue();
+			}	
+		}
+		return null;
+	}
+
+
 	private String replaceAll(String base, LinkedHashMap<String, String> genPairs) {
 		String returner = base;
 		for (Entry<String, String> entry : genPairs.entrySet()) {
@@ -349,10 +360,18 @@ public class CodeCreator {
 	
 	
 	private String ImportFormat(String ObjectName) {
-		return ObjectName.substring(1, ObjectName.length()-1).replace("/", ".");
+		int e;
+		if ((e = ObjectName.indexOf('<')) < 0) {
+			return ObjectName.substring(1, ObjectName.length()-1).replace("/", ".");
+		}
+		else {
+			return ObjectName.substring(1, e).replace("/", ".");
+		}
+		
 	}
 	private String[] constructorDo(String Classname, ASTNode tree) {
 		boolean flag;
+		System.out.println(IfImport(Classname));
 		mv.visitTypeInsn(Opcodes.NEW, IfImport(Classname));
 		mv.visitInsn(Opcodes.DUP);
 		size = curStack.size();
@@ -490,7 +509,7 @@ public class CodeCreator {
 		varSwitch = 1;
 		varCount[1] = 0;
 		varPos.set(1, new HashMap<>()); 
-		String returnType = strToByte(tree.value);
+		String returnType = GenSuperClass(strToByte(tree.value));
 		this.returnType = returnType;
 		String signature = signatureWriterMethod(tree);
 		
@@ -501,9 +520,10 @@ public class CodeCreator {
 		}
 		ArgsList<String> args = fromNodetoArg(tree);
 		if (methodName.equals(curName)) {
-			mv = new CrodotMethodVisitor(cw.visitMethod(results.Classes.get(curName).methods.get(methodName).AccessOpcode, "<init>", args.toArgs() + returnType, signature, null));
+			mv = new CrodotMethodVisitor(cw.visitMethod(results.Classes.get(curName).methods.get(methodName).AccessOpcode, "<init>", args.toArgs() + "V", signature, null));
 			addDefaultstoConst(curName);
 			results.Classes.get(curName).construct = true;
+			this.returnType = "V";
 		}
 		else {
 			mv = new CrodotMethodVisitor(cw.visitMethod(results.Classes.get(curName).methods.get(methodName).AccessOpcode, methodName,  args.toArgs() + returnType, signature, null));
@@ -513,6 +533,14 @@ public class CodeCreator {
 		return false;
 	}
 	
+	private String GenSuperClass(String strToByte) {
+		ClassInfo info = results.Classes.get(curName);
+		if (info.canGeneric() && info.genType.containsKey(strToByte)) {
+			return info.genType.get(strToByte);
+		}
+		return strToByte;
+	}
+
 	private void addDefaultstoConst(String Classname) {
 		mv.visitVarInsn(Opcodes.ALOAD, 0);
 	    mv.visitMethodInsn(Opcodes.INVOKESPECIAL, results.Classes.get(Classname).parent, "<init>", "()V", false);
@@ -739,17 +767,18 @@ public class CodeCreator {
 	
 	public ArgsList<String> fromNodetoArg(ASTNode parent) {
 		ArgsList<String> build = new ArgsList<>();
+		String temp;
 		for (int i = 1; i < parent.GetNodeSize()-1; i++) {
 			
 			if (results.Classes.get(curName).canGeneric() && results.Classes.get(curName).genType.containsKey("T" + parent.GetNode(i).value + ";")) {
-				build.add(results.Classes.get(curName).genType.get("T" + parent.GetNode(i).value + ";"));
+				build.add(temp = results.Classes.get(curName).genType.get("T" + parent.GetNode(i).value + ";"));
 			}
 			else {
-				build.add(strToByte(parent.GetNode(i).value));
+				build.add(temp = strToByte(parent.GetNode(i).value));
 			}
 			
 			
-			varPos.get(varSwitch).put(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, parent.GetNode(i).value, varCount[varSwitch]++));
+			varPos.get(varSwitch).put(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, temp, varCount[varSwitch]++));
 			
 			
 
@@ -783,6 +812,7 @@ public class CodeCreator {
 	}
 	
 	public void newVar(String name, String type, ASTNode generic, int lineNum) {
+		System.out.println(name + generic);
 		String conf = strToByte(type);
 		castTopStackForVar(conf, popStack(), lineNum);
 		switch(conf) {
@@ -791,7 +821,7 @@ public class CodeCreator {
 			break;
 		case "J":
 			mv.visitVarInsn(Opcodes.LSTORE, varCount[varSwitch]);
-			break;
+			break; 
 		case "D":
 			mv.visitVarInsn(Opcodes.DSTORE, varCount[varSwitch]);
 			break;
@@ -808,7 +838,7 @@ public class CodeCreator {
 			varPos.get(varSwitch).put(name, new VarInfo(name, conf, type, varCount[varSwitch]++));
 		}
 		else {
-			varPos.get(varSwitch).put(name, new GenVarInfo(name, conf, type, varCount[varSwitch]++).AddGenerics(generic, results, curName));
+			varPos.get(varSwitch).put(name, new GenVarInfo(name, conf, type, varCount[varSwitch]++).AddGenerics(generic, results, type));
 		}
 		if (conf.equals("J") || conf.equals("D")) {
 			varCount[varSwitch]++;
@@ -816,6 +846,7 @@ public class CodeCreator {
 	}
 	
 	public void newUnknownVar(String name) {
+		System.out.println("howtf");
 		String type = popStack();
 		switch(type) {
 		case "I", "Z", "bool", "byte", "shrt", "int", "char":
@@ -961,7 +992,7 @@ public class CodeCreator {
 			
 			if (info.fields.containsKey(name)) {
 				castTopStackForVar(info.fields.get(name).type ,s.type, node.line);
-				mv.visitFieldInsn(Opcodes.PUTFIELD, info.name, name, strToByte(info.fields.get(name).type));
+				mv.visitFieldInsn(Opcodes.PUTFIELD, info.name, name, info.fields.get(name).type);
 			}
 			else {
 				//err
@@ -2387,8 +2418,20 @@ public class CodeCreator {
 	public String evalE(ASTNode node) {
 		switch(node.type) {
 		case TokenState.DOT:
-			evalE(node.GetFirstNode());
-			return evalE(node.GetNode(1));
+			if (node.GetNodeSize() < 3) {
+				evalE(node.GetFirstNode());
+				return evalE(node.GetNode(1));
+			}
+			else {
+				if (node.GetFirstNode() == node.GetNode(1)) System.out.println("huh?");
+				this.storeEvalE = node.GetNode(2);
+				evalE(node.GetFirstNode());
+				return evalE(node.GetNode(1), "!E");
+			}
+			
+			
+			
+			
 		case TokenState.FUN:
 			curStack.push(new StackInfo(invokeEasy(node), mv.size()));
 			if (stackTop().equals("V")) {
@@ -2478,8 +2521,16 @@ public class CodeCreator {
 	public String evalE(ASTNode node, String TypeExpected) {
 		switch(node.type) {
 		case TokenState.DOT:
-			evalE(node.GetFirstNode());
-			return evalE(node.GetNode(1));
+			if (node.GetNodeSize() < 3) {
+				evalE(node.GetFirstNode());
+				return evalE(node.GetNode(1));
+			}
+			else {
+				
+				this.storeEvalE = node.GetNode(2);
+				evalE(node.GetFirstNode());
+				return evalE(node.GetNode(1), "!E");
+			}
 		case TokenState.FUN:
 			curStack.push(new StackInfo(invokeEasy(node), mv.size()));
 			if (stackTop().equals("V")) {
@@ -2490,11 +2541,22 @@ public class CodeCreator {
 			curStack.push(new StackInfo(constWithGen(node), mv.size()));
 			return stackTop();
 		case TokenState.IDENTIFIER:
-			curStack.push(new StackInfo(loadVar(node.value, node), mv.size()));
-			if (curStack.peek().type.equals("<ARRDEF>")) {
-				err.UnknownIdentifierException(node.line, node.value);
+			
+			
+			if (TypeExpected.equals("!E")) {
+				evalE(storeEvalE);
+				storeVar(node.value, node);
+				storeEvalE = null;
+				return null;
 			}
-			return stackTop();
+			else {
+				curStack.push(new StackInfo(loadVar(node.value, node), mv.size()));
+				if (curStack.peek().type.equals("<ARRDEF>")) {
+					err.UnknownIdentifierException(node.line, node.value);
+				}
+				return stackTop();
+			}
+			
 		case TokenState.ARR:
 			return curStack.push(new StackInfo(LoadArrIndex(loadVar(node.value, node), node, 0), mv.size())).type;
 		case TokenState.RIGHTBRACE:
@@ -6719,7 +6781,6 @@ public class CodeCreator {
 	}
 	
 	public String invokeEasy(ASTNode tree) {
-		
 		String[] Methodinfo;
 		if (tree.prev.type == TokenState.DOT) {
 			LinkedHashMap<String, String> genType = null;
@@ -6728,6 +6789,7 @@ public class CodeCreator {
 				top = "[";
 			}
 			else {
+				System.out.println(top);
 				genType = sigToHash(top);
 				top = stripObj(top);
 			}
@@ -6744,6 +6806,12 @@ public class CodeCreator {
 			}
 			else {
 				invokePublic(tree.value, IfImport(top), Methodinfo[0] + Methodinfo[1]);	
+			}
+
+			if (Methodinfo.length > 3 && Methodinfo[3] != null) {
+				System.out.println(Methodinfo[3]);
+				mv.visitTypeInsn(Opcodes.CHECKCAST, Methodinfo[3].substring(1, Methodinfo[3].length()-1));
+				return  Methodinfo[3];
 			}
 			return Methodinfo[1];
 		}
@@ -6762,12 +6830,13 @@ public class CodeCreator {
 			else {
 				invokePublic(tree.value, curName, Methodinfo[0] + Methodinfo[1]);
 			}
-			
+
 			return Methodinfo[1];
 		}
 	}
 	private LinkedHashMap<String, String> sigToHash(String stack) {
 		int splitpoint = stack.indexOf('<');
+		System.out.println(stack);
 		if (splitpoint < 0) return null;
 		int lastSlash = stack.substring(0, splitpoint).lastIndexOf('/');
 		if (lastSlash < 0) lastSlash = 0;

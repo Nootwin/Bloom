@@ -9,9 +9,7 @@ import java.util.Queue;
 public class ClassFetcher extends ClassLoader {
 	public Class<?> fetchNonJava(String fN, String name){ //fileName in strToByteFormat	
 		File file = new File(fN);
-		System.out.println(file.exists());
 		if (file.exists()) {
-			System.out.println(file.toPath());
 			byte[] b;
 			try {
 				b = Files.readAllBytes(file.toPath());

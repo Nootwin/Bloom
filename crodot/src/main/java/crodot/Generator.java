@@ -25,9 +25,7 @@ public class Generator {
 	}
 	
 	public void lineCheck(ASTNode tree) {
-		System.out.println("C" + tree.line);
 		if (create.mv != null && tree.line > line) {
-			System.out.println("onylinohio");
 			line = tree.line;
 			create.addLineNumber(tree.line);
 			
@@ -46,13 +44,7 @@ public class Generator {
 	}
 	
 	public void decision(ASTNode tree) {
-		System.out.println("C" + tree.line);
-		if (create.mv != null && tree.line > line) {
-			System.out.println("onylinohio");
-			line = tree.line;
-			create.addLineNumber(tree.line);
-			
-		}
+
 		switch(tree.type) {
 		case TokenState.ACCESS:
 			decision(tree.GetFirstNode());
@@ -72,10 +64,11 @@ public class Generator {
 			}
 			break;
 		case TokenState.DOT:
+			System.out.println("UNO");
 			create.evalE(tree);
 			break;
 		case TokenState.IDENTIFIER:
-			
+			System.out.println("please say no");
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			lineCheck(tree);
 			if (tree.GetNodeSize() > 0) {
@@ -110,6 +103,7 @@ public class Generator {
 			}
 			break;
 		case TokenState.DECLARATION:
+			System.out.println("make sure");
 			if (!indentObj.isEmpty() && indentObj.peek().equals("class")) {
 				create.newField(tree.GetFirstNode().value, tree.value, Opcodes.ACC_PUBLIC, tree);
 			}
@@ -192,6 +186,7 @@ public class Generator {
 			}
 			break;
 		case TokenState.RETURN:
+			lineCheck(tree);
 			create.Return(tree.GetFirstNode());
 			break;
 		case TokenState.END:
@@ -204,17 +199,21 @@ public class Generator {
 				unMethod = create.closeMethod();
 				break;
 			case "if":
+				lineCheck(tree);
 				create.EndOfIf();
 				wanderingIf = true;
 				break;
 			case "else":
+				lineCheck(tree);
 				create.EndElse();
 				wanderingIf = false;
 				break;
 			case "while":
+				lineCheck(tree);
 				create.EndWhile(tree.prev.prev.GetFirstNode());
 				break;
 			case "for":
+				lineCheck(tree);
 				create.EndFor(tree.prev.prev);
 				break;
 			}

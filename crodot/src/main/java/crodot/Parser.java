@@ -15,8 +15,6 @@ public class Parser {
 	private ASTNode cur;
 	private int brackets;
 	private ArrayList<Token> code;
-	private final String[][] preOrder = {{"DOT", "DOT"}, {"IDENTIFIER", "VAR"}, {"RIGHTBRACKET", "BRACKET"}};
-	private final String[][] postOrder = {{"SEPERATOR", "SEP"}, {"TRUEEQUALS", "TRUEEQUALS"}, {"NOTEQUALS", "NOTEQUALS"}, {"TRUEGREATERTHAN", "TRUEGREATERTHAN"}, {"TRUELESSTHAN", "TRUELESSTHAN"}, {"LESSTHAN", "LESSTHAN"}, {"GREATERTHAN", "GREATERTHAN"}, {"ADD", "ADD"}, {"SUB", "SUB"}, {"MUL", "MUL"}, {"DIV", "DIV"}, {"REM", "REM"}, {"EXP", "EXP"}, {"DOT", "DOT"}, {"IDENTIFIER", "VAR"}, {"DECLARATION", "VAR"}, {"NUMBER", "NUM"}, {"STRING", "Ljava/lang/String;"}, {"CHAR", "C"}, {"BOOLEAN", "Z"}, {"RIGHTBRACE", "BRACE"}, {"RIGHTBRACKET", "BRACKET"}};
 	private int lineNum;
 	private ErrorThrower err;
 	
@@ -453,15 +451,18 @@ public class Parser {
 			else {
 				lev = 0;
 			}
-			if (code.get(p+lev+2).value.equals("(")) {
+			if (code.get(p+lev+2).type == TokenState.LEFTBRACKET) {
 				cur.SetNode(new ASTNode(cur, TokenState.DESCRIPTION, code.get(p).value, lineNum));
+				cur.debugCheck();
 				cur = cur.GetLastNode();
+				
 				if (lev > 0) {
 					node.prev = cur;
 					cur.SetLast(node);
 				}
 				int genIndex = 0;
 				for (int i = decide(p+lev+1)+1; i < code.size(); i++) {
+
 					switch(code.get(i).type) {
 					case TokenState.LEFTGENERIC:
 						genIndex = i+1;
@@ -593,16 +594,68 @@ public class Parser {
 				return p+1;
 			}	
 		case TokenState.IDENTIFIER:
+
 			switch (cur.type) {
 			case TokenState.DECLARATION, TokenState.DEFINITION, TokenState.DESCRIPTION:
 				cur.SetNode(new ASTNode(cur, TokenState.IDENTIFIER, code.get(p).value, lineNum));
+
 				return p+1;
 			default:
-				for (int i = p; i < code.size(); i++) {
-					if (code.get(i).type == TokenState.ENDOFLINE || code.get(i).type == TokenState.LEFTCURLY || code.get(i).type == TokenState.EQUIVALENCY) {
-						cur.SetNode(preSolve(new ASTNode(cur, lineNum), p-1, i-1));
+				for (int j = p+1; j < code.size(); j++) {
+					if (code.get(j).type == TokenState.ENDOFLINE ||  code.get(j).type == TokenState.EQUIVALENCY) {
+						cur.SetNode(preSolve(new ASTNode(cur, lineNum), p-1, j-1));
 						cur = cur.GetLastNode();
-						return i;
+						System.out.println(j);
+
+						return j;
+					}
+					else if (code.get(j).type == TokenState.LEFTCURLY) {
+						cur.SetNode(new ASTNode(cur, TokenState.DESCRIPTION, code.get(p).value, lineNum));
+						cur.debugCheck();
+						cur = cur.GetLastNode();
+						
+						int genIndex = 0;
+						for (int i = decide(p)+1; i < code.size(); i++) {
+
+							switch(code.get(i).type) {
+							case TokenState.LEFTGENERIC:
+								genIndex = i+1;
+								break;
+							case TokenState.RIGHTGENERIC:
+								cur.SetLast(genericSolve(new ASTNode(cur, TokenState.GENERIC, "<>", lineNum), genIndex, i-1));
+								genIndex = 0;
+								break;
+							case TokenState.RIGHTBRACKET:
+								while (cur.type != TokenState.DESCRIPTION) {
+									cur = cur.prev;
+								}
+								if (code.get(i+1).type != TokenState.LEFTCURLY) {
+									
+									cur.SetLast(new ASTNode(cur, TokenState.START, ";", lineNum));
+									cur = cur.GetLastNode();
+								}
+								return i+1;
+							case TokenState.DECLARATION:
+								if (genIndex == 0) {
+									cur.SetNode(new ASTNode(cur, TokenState.DECLARATION, code.get(i).value, lineNum));
+									cur = cur.GetLastRealNode();
+								}
+								break;
+							case TokenState.LEFTBRACE:
+								cur.value += "[]";
+								break;
+							case TokenState.IDENTIFIER:
+								if (genIndex == 0) {
+									cur.SetNode(new ASTNode(cur, TokenState.IDENTIFIER, code.get(i).value, lineNum));
+								}
+								break;
+							case TokenState.SEPERATOR:
+								if (genIndex == 0) {
+									cur = cur.prev;
+								}
+								break;
+							}
+						}
 					}
 					
 				}
@@ -639,14 +692,22 @@ public class Parser {
 		case TokenState.NEXTLINE:
 			lineNum++;
 			return p+1;
+		default :
+			return -69;
+		
 		}
-	return -69;
+		return -34;
+	
 	}
 	
 	ASTNode parse() {
 		int next = 0;
+		
 		while(code.size() > next) {
+			//System.out.println(next);
 			next = decide(next);
+			
+			
 		}
 		
 		return parent;

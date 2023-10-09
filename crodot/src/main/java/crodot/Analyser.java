@@ -595,7 +595,12 @@ public class Analyser {
 		case TokenState.DECLARATION:
 			if (!curClass.isBlank()) {
 				String name = tree.GetFirstNode().value;
-				results.Classes.get(curClass).fields.put(name, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), tree.GetNode(1)));
+				if (tree.GetNodeSize() > 1) {
+					results.Classes.get(curClass).fields.put(name, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), tree.GetNode(1)));
+				}
+				else {
+					results.Classes.get(curClass).fields.put(name, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), null));
+				}
 				if (accAlr) {
 					if (privacy == 0) {
 						results.Classes.get(curClass).fields.get(name).AccessModifiers = "public";
@@ -684,7 +689,6 @@ public class Analyser {
 				info.genType.put("T" + type.getName() + ";", "L" + type.getBounds()[0].getTypeName().replace(".", "/") + ";");
 
 			}
-			
 			for (Method m : id.getMethods()) {
 				for (TypeVariable<?> type : m.getTypeParameters()) {
 					if (genTypeMethod == null) {

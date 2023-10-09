@@ -86,6 +86,20 @@ public class ASTNode {
 			return next.get(next.size()-2);
 		}
 	}
+	
+	void debugCheck() {
+		System.out.println("                " + "DEBUGCHECK");
+		System.out.println("                " + value);
+		for (ASTNode a: this.next) {
+			
+			System.out.println("                " + caller.TokenStateToString(a.type));
+			
+			
+			
+		}
+		System.out.println("                " + lastCheck);
+		System.out.println("                " + "DEBUGCHECKOVER");
+	}
 
 }
 

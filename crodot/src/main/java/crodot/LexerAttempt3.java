@@ -70,33 +70,40 @@ public class LexerAttempt3 {
 		}
 		else {
 			tokens.add(new Token(TokenState.IDENTIFIER, value));
-			int genBrack = 0;
-			for (int i = tokens.size()-2; i > 0; i--) {
-				if (tokens.get(i).type == TokenState.RIGHTGENERIC) {
-					genBrack++;
-				}
-				else if (tokens.get(i).type == TokenState.LEFTGENERIC) {
-					genBrack--;
-				}
-				else if (genBrack == 0) {
-					if (tokens.get(i).type == TokenState.IDENTIFIER) {
-						tokens.get(i).type = TokenState.DECLARATION;
-						break;
+			if (0 == genCounter.size()) {
+				int genBrack = 0;
+				
+				for (int i = tokens.size()-2; i > -1; i--) {
+					System.out.println(tokens.get(i).value + genBrack);
+					if (tokens.get(i).type == TokenState.RIGHTGENERIC) {
+						genBrack++;
 					}
-					else if (tokens.get(i).type == TokenState.LEFTBRACE) {
-						if (tokens.get(i+1).type != TokenState.RIGHTBRACE) {
+					else if (tokens.get(i).type == TokenState.LEFTGENERIC) {
+						genBrack--;
+					}
+					else if (genBrack == 0) {
+						if (tokens.get(i).type == TokenState.IDENTIFIER) {
+							tokens.get(i).type = TokenState.DECLARATION;
 							break;
 						}
+						else if (tokens.get(i).type == TokenState.LEFTBRACE) {
+							if (tokens.get(i+1).type != TokenState.RIGHTBRACE) {
+								break;
+							}
+						}
+						else if (tokens.get(i).type != TokenState.RIGHTBRACE) {
+							break;
+								
+						}
 					}
-					else if (tokens.get(i).type != TokenState.RIGHTBRACE) {
-						break;
-							
-					}
+					
 				}
+				System.out.println("___");
 				
 				
 					
 			}
+			
 			
 			
 		}

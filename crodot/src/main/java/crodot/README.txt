@@ -13,3 +13,5 @@ generics can only take in classname, ?, extends.
 you are workin on add func;
 
 upload to github
+
+parser, dec sending decide? idk

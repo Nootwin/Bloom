@@ -24,7 +24,7 @@ public class caller {
 		for (int z = 0; z < n; z++) {
 			System.out.print('-');
 		}
-		System.out.println(TokenStateToString(tree.type));
+		System.out.println(tree.value);
 		for (ASTNode i : tree.next) {
 			indtree(i, n+1);
 		}
@@ -142,12 +142,17 @@ public class caller {
 
 	}
 	public static void main(String[] args) {
+		singleFileCompileDebug("C:\\Users\\Nolan Murray\\git\\cro\\crodot\\bloomers\\main.bl", "main.bl");
 		
-		CrodotFileReader fileReader = new CrodotFileReader("C:\\Users\\Nolan Murray\\git\\cro\\crodot\\bloomers\\main.bl");
+
+	}
+	
+	public static void singleFileCompileDebug(String fileLocation, String name) {
+		CrodotFileReader fileReader = new CrodotFileReader(fileLocation);
 		String file = fileReader.ReadFileToString();
 		System.out.println(file);
 		
-		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList(), "main.bl");
+		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList(), name);
 		
 		LexerAttempt3 lex2 = new LexerAttempt3(file, err);
 		ArrayList<Token> lexed = lex2.lex();
@@ -170,12 +175,10 @@ public class caller {
 		AnaResults results = analy.start();
 		
 		printhelpfulresults(results);
-		Generator gen = new Generator(parsed, results, err, "main.bl");
+		Generator gen = new Generator(parsed, results, err, name);
 		
 		gen.createSys(null);
-		
-
-		
 	}
+	
 
 }
