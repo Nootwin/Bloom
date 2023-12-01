@@ -43,6 +43,11 @@ public class GenVarInfo extends VarInfo {
 		return this;
 	}
 	
+	public GenVarInfo AddGenerics(LinkedHashMap<String, String> m) {
+		InferredTypes = m;
+		return this;
+	}
+	
 	public String toString() {
 		
 		StringBuilder b = new StringBuilder();

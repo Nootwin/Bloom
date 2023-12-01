@@ -102,7 +102,7 @@ public class CrodotMethodVisitor{
 	}
 
 	public void insert(CrodotCode code, int space) {
-		codes.add(space+1, code);
+		codes.add(space, code);
 	}
 	public CrodotCode pop() {
 		return codes.removeLast();
@@ -125,6 +125,17 @@ public class CrodotMethodVisitor{
 			
 		}
 		
+	}
+	
+	public void debug() {
+		System.out.println("START DEBUG");
+		for (CrodotCode c : codes) {
+			System.out.println(c.toString());
+			if (c instanceof CrodotInsn) {
+				System.out.print(((CrodotInsn) c).opcode);
+			}
+		}
+		System.out.println("END DEBUG");
 	}
 	
 	public int size() {

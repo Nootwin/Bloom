@@ -3,7 +3,7 @@ package crodotInsn;
 import org.objectweb.asm.MethodVisitor;
 
 public class CrodotInsn extends CrodotCode {
-	int opcode;
+	public int opcode;
 
 	public CrodotInsn(int opcode) {
 		super();

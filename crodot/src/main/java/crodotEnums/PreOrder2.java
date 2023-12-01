@@ -11,6 +11,8 @@ public class PreOrder2 {
 	
 	public PreOrder2() {
 		map.put(TokenState.DOT, 3);
+		map.put(TokenState.INCREMENT, 2);
+		map.put(TokenState.DECREMENT, 2);
 		map.put(TokenState.IDENTIFIER, 4);
 		map.put(TokenState.RIGHTBRACE, 6);
 		map.put(TokenState.RIGHTBRACKET, 5);

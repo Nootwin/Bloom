@@ -20,6 +20,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
+import crodotInsn.CrodotIInc;
 import crodotInsn.CrodotInsn;
 import crodotInsn.CrodotMethod;
 import crodotInsn.CrodotType;
@@ -37,26 +38,25 @@ public class CodeCreator {
 	private ClassWriter OtherClass;
 	private ClassWriter MainClass;
 	private CrodotMethodVisitor MainMethod;
-	private ArrayList<HashMap<String, VarInfo>> varPos;
-	private int varSwitch;
 	private Stack<Label> labelList;
 	private String top;
 	private int size;
-	private int[] varCount = new int[2];
 	private Stack<StackInfo> curStack;
 	private ErrorThrower err;
 	private ASTNode storeEvalE;
 	AnaResults results;
 	private ArrayList<Integer> getAllRangeStackPos;
+	private VariableManager vars;
 	
 	
 	CodeCreator(AnaResults results, ErrorThrower err, String sourceFile) {
+		vars = new VariableManager();
 		labelList = new Stack<>();
 		curStack = new Stack<>();
-		varSwitch = 1;
-		varPos = new ArrayList<>();
-		varPos.add(null);
-		varPos.add(null);
+//		varSwitch = 1;
+//		varPos = new ArrayList<>();
+//		varPos.add(null);
+//		varPos.add(null);
 		this.results = results;
 		this.err = err;
 		this.sourceFile = sourceFile;
@@ -66,16 +66,21 @@ public class CodeCreator {
 		MainClass.visitSource(sourceFile, null);
 		
 		MainMethod = new CrodotMethodVisitor(MainClass.visitMethod(Opcodes.ACC_PUBLIC + Opcodes.ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null));
-		varPos.set(0, new HashMap<>());
-		varPos.get(0).put("args", new VarInfo("args", "str", 0));
-		varCount[0] = 1;
+//		varPos.set(0, new HashMap<>());
+//		varPos.get(0).put("args", new VarInfo("args", "str", 0));
+		vars.addMain("args",  new VarInfo("args", "str", 0));
+		vars.setMainLength(1);
+//		varCount[0] = 1;
 		labelList = new Stack<>();
 	}
 	
 	public void ClearStack() {
-		while (!curStack.isEmpty()) {
-			curStack.pop();
-			mv.visitInsn(Opcodes.POP);
+		if (mv != null ) {
+			while (!curStack.isEmpty()) {
+
+				
+				mv.visitInsn(Opcodes.POP);
+			}
 		}
 	}
 	public String[] checkMethodvStack(String Methodname, String Classname, int size, int LineNum) {
@@ -136,6 +141,17 @@ public class CodeCreator {
 		}
 		System.out.println("damn daniel " + Methodname + "   " + curName + "   "+ Classname +"   "+ stacks.toString());
 		return null;
+	}
+	
+	public void storeField(ASTNode eval, StackInfo parent) {
+		if (eval.prev.prev.type == TokenState.DOT) {
+			ClassInfo info = results.Classes.get(stripObj(parent.type));
+			mv.visitFieldInsn(Opcodes.PUTFIELD, info.name, eval.value, info.fields.get(eval.value).type);
+		}
+		else {
+			ClassInfo info = results.Classes.get(curName);
+			mv.visitFieldInsn(Opcodes.PUTFIELD, info.name, eval.value, info.fields.get(eval.value).type);
+		}
 	}
 	
 	private void addCastings(ArgsList<String> argsList, ArrayList<ArrayList<String>> stacks) {
@@ -371,7 +387,6 @@ public class CodeCreator {
 	}
 	private String[] constructorDo(String Classname, ASTNode tree) {
 		boolean flag;
-		System.out.println(IfImport(Classname));
 		mv.visitTypeInsn(Opcodes.NEW, IfImport(Classname));
 		mv.visitInsn(Opcodes.DUP);
 		size = curStack.size();
@@ -506,16 +521,14 @@ public class CodeCreator {
 	}
 	
 	public boolean newMethod(String methodName, ASTNode tree) {
-		varSwitch = 1;
-		varCount[1] = 0;
-		varPos.set(1, new HashMap<>()); 
+		vars.setSub();
+		vars.resetSub();
 		String returnType = GenSuperClass(strToByte(tree.value));
 		this.returnType = returnType;
 		String signature = signatureWriterMethod(tree);
 		
 		if (!results.Classes.get(curName).methods.get(methodName).AccessModifiers.contains("static")) {
-			varPos.get(1).put("this", new VarInfo("this" , curName, 0));
-			varCount[1] = 1;
+			vars.add("this", new VarInfo("this" , curName, 0));
 			
 		}
 		ArgsList<String> args = fromNodetoArg(tree);
@@ -548,6 +561,7 @@ public class CodeCreator {
 	    	if (entry.getValue().HasCroValue()) {
 	    		mv.visitVarInsn(Opcodes.ALOAD, 0);
 	    		evalE(entry.getValue().OwnerValue);
+	    		popStack();
 	    		mv.visitFieldInsn(Opcodes.PUTFIELD, curName, entry.getKey(), entry.getValue().type);
 	    	}
 	    }
@@ -667,13 +681,12 @@ public class CodeCreator {
 			
 		
 			if (method) {
-				mv = (CrodotMethodVisitor) MainMethod;
-				varSwitch = 0;
+				mv =  MainMethod;
+				vars.setMain();
 			}
 		}
 		if (If) {
-			Else();
-			EndElse();
+			EndOfIf();
 			
 		}
 		return false;
@@ -737,28 +750,28 @@ public class CodeCreator {
 			case "<>":
 				break;
 			case "str":
-				varPos.get(varSwitch).put(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "str", varCount[varSwitch]++));
+				vars.add(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "str", vars.getLength()));
 				break;
 			case "char":
-				varPos.get(varSwitch).put(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "char", varCount[varSwitch]++));
+				vars.add(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "char", vars.getLength()));
 				break;
 			case "long":
-				varPos.get(varSwitch).put(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "long", varCount[varSwitch]++));
+				vars.add(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "long", vars.getLength()));
 				break;
 			case "int":
-				varPos.get(varSwitch).put(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "int", varCount[varSwitch]++));
+				vars.add(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "int", vars.getLength()));
 				break;
 			case "shrt":
-				varPos.get(varSwitch).put(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "shrt", varCount[varSwitch]++));
+				vars.add(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "shrt", vars.getLength()));
 				break;
 			case "byte":
-				varPos.get(varSwitch).put(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "byte", varCount[varSwitch]++));
+				vars.add(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "byte", vars.getLength()));
 				break;
 			case "bool":
-				varPos.get(varSwitch).put(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "bool", varCount[varSwitch]++));
+				vars.add(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, "bool", vars.getLength()));
 				break;
 			default:
-				varPos.get(varSwitch).put(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, parent.GetNode(i).value, varCount[varSwitch]++));
+				vars.add(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, parent.GetNode(i).value, vars.getLength()));
 				}
 				
 			}
@@ -778,7 +791,7 @@ public class CodeCreator {
 			}
 			
 			
-			varPos.get(varSwitch).put(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, temp, varCount[varSwitch]++));
+			vars.add(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, temp, vars.getLength()));
 			
 			
 
@@ -808,67 +821,71 @@ public class CodeCreator {
 		if (!results.Classes.containsKey(IfImport(type))) {
 			err.UnknownClassException(line, name, type);
 		}
-		varPos.get(varSwitch).put(name, new VarInfo(name, type, varCount[varSwitch]++));
+		vars.add(name, new VarInfo(name, type, vars.getLength()));
 	}
 	
 	public void newVar(String name, String type, ASTNode generic, int lineNum) {
-		System.out.println(name + generic);
 		String conf = strToByte(type);
 		castTopStackForVar(conf, popStack(), lineNum);
 		switch(conf) {
 		case "I", "Z", "B", "S", "C":
-			mv.visitVarInsn(Opcodes.ISTORE, varCount[varSwitch]);
+			mv.visitVarInsn(Opcodes.ISTORE, vars.getLength());
 			break;
 		case "J":
-			mv.visitVarInsn(Opcodes.LSTORE, varCount[varSwitch]);
+			mv.visitVarInsn(Opcodes.LSTORE, vars.getLength());
 			break; 
 		case "D":
-			mv.visitVarInsn(Opcodes.DSTORE, varCount[varSwitch]);
+			mv.visitVarInsn(Opcodes.DSTORE, vars.getLength());
 			break;
 		case "F":
-			mv.visitVarInsn(Opcodes.FSTORE, varCount[varSwitch]);
+			mv.visitVarInsn(Opcodes.FSTORE, vars.getLength());
 			break;
 		default:
-			System.out.println(type);
-			mv.visitVarInsn(Opcodes.ASTORE, varCount[varSwitch]);
+			mv.visitVarInsn(Opcodes.ASTORE, vars.getLength());
 			break;
 		}
 		
 		if (generic == null) {
-			varPos.get(varSwitch).put(name, new VarInfo(name, conf, type, varCount[varSwitch]++));
+			vars.add(name, new VarInfo(name, conf, type, vars.getLength()));
 		}
 		else {
-			varPos.get(varSwitch).put(name, new GenVarInfo(name, conf, type, varCount[varSwitch]++).AddGenerics(generic, results, type));
+			vars.add(name, new GenVarInfo(name, conf, type, vars.getLength()).AddGenerics(generic, results, type));
 		}
 		if (conf.equals("J") || conf.equals("D")) {
-			varCount[varSwitch]++;
+			vars.Inc();
 		}
 	}
 	
 	public void newUnknownVar(String name) {
-		System.out.println("howtf");
+		
 		String type = popStack();
+		LinkedHashMap<String, String> generic = sigToHash(type);
 		switch(type) {
 		case "I", "Z", "bool", "byte", "shrt", "int", "char":
-			mv.visitVarInsn(Opcodes.ISTORE, varCount[varSwitch]);
+			mv.visitVarInsn(Opcodes.ISTORE, vars.getLength());
 			break;
 		case "long", "J":
-			mv.visitVarInsn(Opcodes.LSTORE, varCount[varSwitch]);
+			mv.visitVarInsn(Opcodes.LSTORE, vars.getLength());
 			break;
 		case "doub", "D":
-			mv.visitVarInsn(Opcodes.DSTORE, varCount[varSwitch]);
+			mv.visitVarInsn(Opcodes.DSTORE, vars.getLength());
 			break;
 		case "flt":
-			mv.visitVarInsn(Opcodes.FSTORE, varCount[varSwitch]);
+			mv.visitVarInsn(Opcodes.FSTORE, vars.getLength());
 			break;
 		default:
-			mv.visitVarInsn(Opcodes.ASTORE, varCount[varSwitch]);
+			mv.visitVarInsn(Opcodes.ASTORE, vars.getLength());
 			break;
 		}
 		
-		varPos.get(varSwitch).put(name, new VarInfo(name, type, varCount[varSwitch]++));
+		if (generic == null) {
+			vars.add(name, new VarInfo(name, type, vars.getLength()));
+		}
+		else {
+			vars.add(name, new GenVarInfo(name, type.substring(0, type.indexOf('<')+1), vars.getLength()).AddGenerics(generic));
+		}
 		if (type.equals("J") || type.equals("D")) {
-			varCount[varSwitch]++;
+			vars.Inc();
 		}
 	}
 	
@@ -876,11 +893,18 @@ public class CodeCreator {
 		return curStack.peek().type;
 	}
 	
-	public String loadVar(String name, ASTNode node) {
-		
+	public String loadVar(String name, ASTNode bode) {
+		String add;
 		VarInfo var;
-		if (varPos.get(varSwitch).containsKey(name)) {
-			var = varPos.get(varSwitch).get(name);
+		ASTNode node = bode;
+		if (vars.contains(name)) {
+			if (node.prev.type == TokenState.INCREMENT || node.prev.type == TokenState.DECREMENT) { 
+				add = "VAR";
+			}
+			else {
+				add = "";
+			}
+			var = vars.get(name);
 			if (var.type.contains("[")) {
 				mv.visitVarInsn(Opcodes.ALOAD, var.pos);
 				
@@ -889,38 +913,45 @@ public class CodeCreator {
 			switch(var.type) {
 			case "Z":
 				mv.visitVarInsn(Opcodes.ILOAD, var.pos);
-				return "Z";
+				return add + "Z";
 			case "B":
 				mv.visitVarInsn(Opcodes.ILOAD, var.pos);
-				return "B";
+				return add + "B";
 			case "S":
 				mv.visitVarInsn(Opcodes.ILOAD, var.pos);
-				return "S";
+				return add + "S";
 			case "I":
 				mv.visitVarInsn(Opcodes.ILOAD, var.pos);
-				return "I";
+				return add + "I";
 			case "C":
 				mv.visitVarInsn(Opcodes.ILOAD, var.pos);
-				return "C";
+				return add + "C";
 			case "J":
 				mv.visitVarInsn(Opcodes.LLOAD, var.pos);
-				return "J";
+				return add + "J";
 			case "D":
 				mv.visitVarInsn(Opcodes.DLOAD, var.pos);
-				return "D";
+				return add + "D";
 			case "F":
 				mv.visitVarInsn(Opcodes.FLOAD, var.pos);
-				return "F";
+				return add + "F";
 			default:
 				mv.visitVarInsn(Opcodes.ALOAD, var.pos);
-				return var.toString();
+				return add + var.toString();
 				
 			}
 		}
 		else {
+			if (node.prev.type == TokenState.INCREMENT || node.prev.type == TokenState.DECREMENT) { 
+				add = "FEL";
+				node = node.prev;
+			}
+			else {
+				add = "";
+			}
 			ClassInfo info;
 			if (node.prev.type == TokenState.DOT) {
-				String prev = curStack.pop().type;
+				String prev = stripObj(curStack.pop().type);
 				if (prev.startsWith("[")) {
 					mv.visitInsn(Opcodes.ARRAYLENGTH);
 					return "I";
@@ -934,12 +965,15 @@ public class CodeCreator {
 				mv.visitVarInsn(Opcodes.ALOAD, 0);
 				
 			}
+
 			if (info.fields.containsKey(name)) {
+
 				mv.visitFieldInsn(Opcodes.GETFIELD, info.name, name, info.fields.get(name).type);
-				return info.fields.get(name).type;
+				return add + info.fields.get(name).type;
 				
 			}
 			else {
+				mv.pop();
 				return "<ARRDEF>";
 			}
 		}
@@ -954,8 +988,8 @@ public class CodeCreator {
 	public void storeVar(String name, ASTNode node) {
 		
 		VarInfo var;
-		if (varPos.get(varSwitch).containsKey(name)) {
-			var = varPos.get(varSwitch).get(name);
+		if (vars.contains(name)) {
+			var = vars.get(name);
 			castTopStackForVar(var.type, popStack(), node.line);
 			switch(var.type) {
 			case "I", "Z", "bool", "byte", "shrt", "int", "char":
@@ -983,11 +1017,11 @@ public class CodeCreator {
 			StackInfo s = curStack.pop();
 			ClassInfo info;
 			if (node.prev.type == TokenState.DOT) {
-				info = results.Classes.get(curStack.pop().type);
+				info = results.Classes.get(stripObj(curStack.pop().type));
 			}
 			else {
 				info = results.Classes.get(curName);
-				mv.insert(new CrodotVar(Opcodes.ALOAD, s.posInQueue-1), size);
+				mv.insert(new CrodotVar(Opcodes.ALOAD, s.posInQueue), size);
 			}
 			
 			if (info.fields.containsKey(name)) {
@@ -1004,6 +1038,7 @@ public class CodeCreator {
 	
 	
 	private void castTopStackForVar(String targetStack, String curStack, int lineNum) {
+
 		switch(targetStack) {
 		case "Z":
 			switch(curStack) {
@@ -1620,6 +1655,7 @@ public class CodeCreator {
 			mv.visitJumpInsn(Opcodes.IFNE, label);
 			break;
 		case TokenState.TRUEEQUALS:
+
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			CTrueEquals(label);
@@ -1674,17 +1710,17 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IF_ICMPLT, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
 				mv.visitInsn(Opcodes.LCMP);
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
@@ -1696,7 +1732,7 @@ public class CodeCreator {
 		case "J":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LCMP);
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
@@ -1705,12 +1741,12 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
@@ -1722,12 +1758,12 @@ public class CodeCreator {
 		case "F":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
@@ -1736,7 +1772,7 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
@@ -1748,17 +1784,17 @@ public class CodeCreator {
 		case "D":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLT, l);
 				break;
@@ -1799,17 +1835,17 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IF_ICMPLE, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
 				mv.visitInsn(Opcodes.LCMP);
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
@@ -1821,7 +1857,7 @@ public class CodeCreator {
 		case "J":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LCMP);
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
@@ -1830,12 +1866,12 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
@@ -1847,12 +1883,12 @@ public class CodeCreator {
 		case "F":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
@@ -1861,7 +1897,7 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
@@ -1873,17 +1909,17 @@ public class CodeCreator {
 		case "D":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLE, l);
 				break;
@@ -1923,17 +1959,17 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IF_ICMPGE, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
 				mv.visitInsn(Opcodes.LCMP);
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
@@ -1945,7 +1981,7 @@ public class CodeCreator {
 		case "J":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LCMP);
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
@@ -1954,12 +1990,12 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
@@ -1971,12 +2007,12 @@ public class CodeCreator {
 		case "F":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
@@ -1985,7 +2021,7 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
@@ -1997,17 +2033,17 @@ public class CodeCreator {
 		case "D":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGE, l);
 				break;
@@ -2048,17 +2084,17 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IF_ICMPGT, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
 				mv.visitInsn(Opcodes.LCMP);
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
@@ -2070,7 +2106,7 @@ public class CodeCreator {
 		case "J":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LCMP);
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
@@ -2079,12 +2115,12 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
@@ -2096,12 +2132,12 @@ public class CodeCreator {
 		case "F":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
@@ -2110,7 +2146,7 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
@@ -2122,17 +2158,17 @@ public class CodeCreator {
 		case "D":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGT, l);
 				break;
@@ -2171,17 +2207,17 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IF_ICMPNE, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
 				mv.visitInsn(Opcodes.LCMP);
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
@@ -2193,7 +2229,7 @@ public class CodeCreator {
 		case "J":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LCMP);
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
@@ -2202,12 +2238,12 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
@@ -2219,12 +2255,12 @@ public class CodeCreator {
 		case "F":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
@@ -2233,7 +2269,7 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
@@ -2245,17 +2281,17 @@ public class CodeCreator {
 		case "D":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFNE, l);
 				break;
@@ -2283,7 +2319,7 @@ public class CodeCreator {
 	private void CTrueEquals(Label l) {
 		StackInfo s1 = curStack.pop();
 		StackInfo s2 = curStack.pop();
-		
+
 		
 		switch(s1.type) {
 		case "Z":
@@ -2302,17 +2338,17 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IF_ICMPEQ, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
 				mv.visitInsn(Opcodes.LCMP);
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
@@ -2324,7 +2360,7 @@ public class CodeCreator {
 		case "J":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LCMP);
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
@@ -2333,12 +2369,12 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
@@ -2350,12 +2386,12 @@ public class CodeCreator {
 		case "F":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FCMPL);
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
@@ -2364,7 +2400,7 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
@@ -2376,17 +2412,17 @@ public class CodeCreator {
 		case "D":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFEQ, l);
 				break;
@@ -2417,13 +2453,16 @@ public class CodeCreator {
 	
 	public String evalE(ASTNode node) {
 		switch(node.type) {
+		case TokenState.TRUEEQUALS, TokenState.NOTEQUALS, TokenState.TRUEGREATERTHAN, TokenState.TRUELESSTHAN, TokenState.GREATERTHAN, TokenState.LESSTHAN:
+			System.out.println("RANHERE");
+			return booleanOperator(node);
 		case TokenState.DOT:
 			if (node.GetNodeSize() < 3) {
 				evalE(node.GetFirstNode());
 				return evalE(node.GetNode(1));
 			}
 			else {
-				if (node.GetFirstNode() == node.GetNode(1)) System.out.println("huh?");
+
 				this.storeEvalE = node.GetNode(2);
 				evalE(node.GetFirstNode());
 				return evalE(node.GetNode(1), "!E");
@@ -2431,9 +2470,13 @@ public class CodeCreator {
 			
 			
 			
-			
+		case TokenState.INCREMENT:
+			return EIncrement(node, 1);
+		case TokenState.DECREMENT:
+			return EIncrement(node, -1);
 		case TokenState.FUN:
 			curStack.push(new StackInfo(invokeEasy(node), mv.size()));
+
 			if (stackTop().equals("V")) {
 				return popStack();
 			}
@@ -2447,7 +2490,23 @@ public class CodeCreator {
 				err.UnknownIdentifierException(node.line, node.value);
 			}
 			return stackTop();
+		case TokenState.NOT:
+			mv.visitLdcInsn(false);
+			evalE(node.GetFirstNode());
+			mv.visitInsn(Opcodes.IAND);
+			return "Z";
 		case TokenState.ARR:
+			if (node.prev.type == TokenState.INCREMENT || node.prev.type == TokenState.DECREMENT) {
+
+				curStack.push(new StackInfo(loadVar(node.value, node), mv.size()));
+				if (curStack.peek().type.startsWith("FEL")) {
+					curStack.peek().type = curStack.peek().type.substring(3);
+				}
+				curStack.push(new StackInfo(LoadArrIndex(curStack.peek().type, node, 0), mv.size()));
+				curStack.peek().type = "ARR" + curStack.peek().type;
+
+				return curStack.peek().type;
+			}
 			return curStack.push(new StackInfo(LoadArrIndex(loadVar(node.value, node), node, 0), mv.size())).type;
 		case TokenState.RIGHTBRACE:
 			return initArray(node);
@@ -2514,12 +2573,1378 @@ public class CodeCreator {
 		
 		return "NULL";
 	}
+	
+	private String castBothTG(StackInfo s1, StackInfo s2) {
+		System.out.println(s1.type + s2.type);
+		switch(s1.type) {
+		case "B", "S", "I", "C":
+			switch(s2.type) {
+			case "B", "S", "I", "C":
+				return "I";
+			case "J":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				return "J";
+			case "F":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				return "F";
+			case "D":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Byte;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+				return "I";
+			case "Ljava/lang/Short;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+				return "I";
+			case "Ljava/lang/Character;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+				return "I";
+			case "Ljava/lang/Integer;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
+				return "I";
+			case "Ljava/lang/Long;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				return "J";
+			case "Ljava/lang/Float;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				return "F";
+			case "Ljava/lang/Double;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				return "D";
+			default:
+				//err
+			}
+		case "J":
+			switch(s2.type) {
+			case "B", "S", "I", "C":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				return "J";
+			case "J":
+				return "J";
+			case "F":
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				return "F";
+			case "D":
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Byte;":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+				return "J";
+			case "Ljava/lang/Short;":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+				return "J";
+			case "Ljava/lang/Character;":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+				return "J";
+			case "Ljava/lang/Integer;":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
+				return "J";
+			case "Ljava/lang/Long;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s2.posInQueue);
+				return "J";
+			case "Ljava/lang/Float;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				return "F";
+			case "Ljava/lang/Double;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				return "D";
+			default:
+				//err
+			}
+		
+		case "F":
+			switch(s2.type) {
+			case "B", "S", "I", "C":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				return "F";
+			case "J":
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				return "F";
+			case "F":
+				return "F";
+			case "D":
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Byte;":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+				return "F";
+			case "Ljava/lang/Short;":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+				return "F";
+			case "Ljava/lang/Character;":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+				return "F";
+			case "Ljava/lang/Integer;":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
+				return "F";
+			case "Ljava/lang/Long;":
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s2.posInQueue);
+				return "F";
+			case "Ljava/lang/Float;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
+				return "F";
+			case "Ljava/lang/Double;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				return "D";
+			default:
+				//err
+			}
+		case "D":
+			switch(s2.type) {
+			case "B", "S", "I", "C":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				return "D";
+			case "J":
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				return "D";
+			case "F":
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				return "D";
+			case "D":
+				return "D";
+			case "Ljava/lang/Byte;":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+				return "D";
+			case "Ljava/lang/Short;":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+				return "D";
+			case "Ljava/lang/Character;":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+				return "D";
+			case "Ljava/lang/Integer;":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
+				return "D";
+			case "Ljava/lang/Long;":
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s2.posInQueue);
+				return "D";
+			case "Ljava/lang/Float;":
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
+				return "D";
+			case "Ljava/lang/Double;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+				return "D";
+			default:
+				//err
+			}
+		case "Ljava/lang/Byte;":
+			switch(s2.type) {
+			case "B", "S", "I", "C":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				return "I";
+			case "J":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				return "J";
+			case "F":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				return "F";
+			case "D":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Byte;":
+				return "Ljava/lang/Byte;";
+			case "Ljava/lang/Short;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				return "I";
+			case "Ljava/lang/Character;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				return "I";
+			case "Ljava/lang/Integer;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				return "I";
+			case "Ljava/lang/Long;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				return "J";
+			case "Ljava/lang/Float;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				return "F";
+			case "Ljava/lang/Double;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				return "D";
+			default:
+				//err
+			}
+		case "Ljava/lang/Short;":
+			switch(s2.type) {
+			case "B", "S", "I", "C":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				return "I";
+			case "J":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				return "J";
+			case "F":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				return "F";
+			case "D":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Byte;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				return "I";
+			case "Ljava/lang/Short;":
+				return "Ljava/lang/Short;";
+			case "Ljava/lang/Character;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				return "I";
+			case "Ljava/lang/Integer;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				return "I";
+			case "Ljava/lang/Long;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				return "J";
+			case "Ljava/lang/Float;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				return "F";
+			case "Ljava/lang/Double;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				return "D";
+			default:
+				//err
+			}
+		case "Ljava/lang/Character;":
+			switch(s2.type) {
+			case "B", "S", "I", "C":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				return "I";
+			case "J":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				return "J";
+			case "F":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				return "F";
+			case "D":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Byte;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				return "I";
+			case "Ljava/lang/Short;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				return "I";
+			case "Ljava/lang/Character;":
+				return "Ljava/lang/Character;";
+			case "Ljava/lang/Integer;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				return "I";
+			case "Ljava/lang/Long;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				return "J";
+			case "Ljava/lang/Float;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				return "F";
+			case "Ljava/lang/Double;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				return "D";
+			default:
+				//err
+			}
+		case "Ljava/lang/Integer;":
+			switch(s2.type) {
+			case "B", "S", "I", "C":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				return "I";
+			case "J":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				return "J";
+			case "F":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				return "F";
+			case "D":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Byte;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				return "I";
+			case "Ljava/lang/Short;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				return "I";
+			case "Ljava/lang/Character;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				return "I";
+			case "Ljava/lang/Integer;":
+				return "Ljava/lang/Integer;";
+			case "Ljava/lang/Long;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				return "J";
+			case "Ljava/lang/Float;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				return "F";
+			case "Ljava/lang/Double;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				return "D";
+			default:
+				//err
+			}
+		case "Ljava/lang/Long;":
+			switch(s2.type) {
+			case "B", "S", "I", "C":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s1.posInQueue);
+				return "J";
+			case "J":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s1.posInQueue);
+				return "J";
+			case "F":
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s1.posInQueue);
+				return "F";
+			case "D":
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Byte;":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s1.posInQueue);
+				return "J";
+			case "Ljava/lang/Short;":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s1.posInQueue);
+				return "J";
+			case "Ljava/lang/Character;":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s1.posInQueue);
+				return "J";
+			case "Ljava/lang/Integer;":
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s1.posInQueue);
+				return "J";
+			case "Ljava/lang/Long;":
+				return "Ljava/lang/Long;";
+			case "Ljava/lang/Float;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s1.posInQueue);
+				return "F";
+			case "Ljava/lang/Double;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s1.posInQueue);
+				return "D";
+			default:
+				//err
+			}
+		case "Ljava/lang/Float;":
+			switch(s2.type) {
+			case "B", "S", "I", "C":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				return "F";
+			case "J":
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				return "F";
+			case "F":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				return "F";
+			case "D":
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Byte;":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				return "F";
+			case "Ljava/lang/Short;":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				return "F";
+			case "Ljava/lang/Character;":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				return "F";
+			case "Ljava/lang/Integer;":
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				return "F";
+			case "Ljava/lang/Long;":
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				return "F";
+			case "Ljava/lang/Float;":
+				return "Ljava/lang/Float;";
+			case "Ljava/lang/Double;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				return "D";
+			default:
+				//err
+			}
+		case "Ljava/lang/Double;":
+			switch(s2.type) {
+			case "B", "S", "I", "C":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				return "D";
+			case "J":
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				return "D";
+			case "F":
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				return "D";
+			case "D":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Byte;":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Short;":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Character;":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Integer;":
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Long;":
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Float;":
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				return "D";
+			case "Ljava/lang/Double;":
+				return "Ljava/lang/Double;";
+			default:
+				//err
+			}
+		
+			
+			
+			
+		}
+		return null;
+	}
+	
+	private String booleanOperator(ASTNode node) {
+		evalE(node.GetFirstNode());
+		StackInfo s1 = curStack.pop();
+		evalE(node.GetNode(1));
+		StackInfo s2 = curStack.pop();
+
+		Label l1 = new Label();
+		Label l2 = new Label();
+		String fType;
+		if(s1.type != s2.type) {
+			fType = castBothTG(s1, s2);
+		}
+		else {
+			fType = s1.type;
+		}
+		switch(node.type) {
+		case TokenState.TRUEEQUALS:
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPNE, l1);
+				break;
+			case "J":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFNE, l1);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFNE, l1);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFNE, l1);
+				break;
+			default:
+				mv.visitJumpInsn(Opcodes.IF_ACMPNE, l1);
+				break;
+			}
+			break;
+		case TokenState.NOTEQUALS:
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPEQ, l1);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFEQ, l1);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFEQ, l1);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFEQ, l1);
+				break;
+			default:
+				mv.visitJumpInsn(Opcodes.IF_ACMPEQ, l1);
+				break;
+			}
+			break;
+		case TokenState.TRUEGREATERTHAN:
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPLT, l1);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFLT, l1);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFLT, l1);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFLT, l1);
+				break;
+			default:
+				//err
+			}
+			break;
+		case TokenState.TRUELESSTHAN:
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPGT, l1);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFGT, l1);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFGT, l1);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFGT, l1);
+				break;
+			default:
+				//err
+			}
+			break;
+		case TokenState.GREATERTHAN:
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPLE, l1);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFLE, l1);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFLE, l1);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFLE, l1);
+				break;
+			default:
+				//err
+			}
+			break;
+		case TokenState.LESSTHAN:
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPGE, l1);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFGE, l1);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFGE, l1);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFGE, l1);
+				break;
+			default:
+				//err
+			}
+			break;
+		}
+		
+		mv.visitLdcInsn(true);
+		mv.visitJumpInsn(Opcodes.GOTO, l2);
+		mv.visitLabel(l1);
+		mv.visitLdcInsn(false);
+		mv.visitLabel(l2);
+		
+		
+		// TODO Auto-generated method stub
+		curStack.push(new StackInfo("Z", mv.size()));
+		return null;
+	}
+
+	private String EIncrement(ASTNode node, int mod) {
+		StackInfo parent;
+		if (node.prev.type == TokenState.DOT) {
+			parent = curStack.peek();
+		}
+		else {
+			parent = null;
+		}
+		evalE(node.GetFirstNode());
+		StackInfo s = curStack.pop();
+
+		String lils = s.type.substring(3);
+
+		switch(s.type.substring(0, 3)) {
+		case "VAR":
+			if (node.value.equals("E")) {
+				switch(lils) {
+				case "B", "C", "S", "I":
+					mv.visitIincInsn(vars.get(node.GetFirstNode().value).pos, mod);
+					break;
+				case "J":
+					mv.visitInsn(Opcodes.DUP2);
+					mv.visitLdcInsn((long) mod);
+					mv.visitInsn(Opcodes.LADD);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "F":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitLdcInsn((float) mod);
+					mv.visitInsn(Opcodes.FADD);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "D":
+					mv.visitInsn(Opcodes.DUP2);
+					mv.visitLdcInsn((double) mod);
+					mv.visitInsn(Opcodes.DADD);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Byte;":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Short;":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Integer;":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Character;":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Long;":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false);
+					mv.visitLdcInsn((long) mod);
+					mv.visitInsn(Opcodes.LADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "valueOf", "(L)Ljava/lang/Long;", false);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Float;":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false);
+					mv.visitLdcInsn((float) mod);
+					mv.visitInsn(Opcodes.FADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Double;":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false);
+					mv.visitLdcInsn((float) mod);
+					mv.visitInsn(Opcodes.DADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				}
+				curStack.add(new StackInfo(lils, mv.size()));
+			}
+			else {
+				switch(lils) {
+				case "B", "C", "S", "I":
+					mv.insert(new CrodotIInc(vars.get(node.GetFirstNode().value).pos, mod), s.posInQueue);
+					break;
+				case "J":
+					mv.visitLdcInsn((long) mod);
+					mv.visitInsn(Opcodes.LADD);
+					mv.visitInsn(Opcodes.DUP2);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "F":
+					
+					mv.visitLdcInsn((float) mod);
+					mv.visitInsn(Opcodes.FADD);
+					mv.visitInsn(Opcodes.DUP);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "D":
+					mv.visitLdcInsn((double) mod);
+					mv.visitInsn(Opcodes.DADD);
+					mv.visitInsn(Opcodes.DUP2);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Byte;":
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
+					mv.visitInsn(Opcodes.DUP);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Short;":
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
+					mv.visitInsn(Opcodes.DUP);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Integer;":
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+					mv.visitInsn(Opcodes.DUP);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Character;":
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
+					mv.visitInsn(Opcodes.DUP);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Long;":
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false);
+					mv.visitLdcInsn((long) mod);
+					mv.visitInsn(Opcodes.LADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "valueOf", "(L)Ljava/lang/Long;", false);
+					mv.visitInsn(Opcodes.DUP);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Float;":
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false);
+					mv.visitLdcInsn((float) mod);
+					mv.visitInsn(Opcodes.FADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
+					mv.visitInsn(Opcodes.DUP);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				case "Ljava/lang/Double;":
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false);
+					mv.visitLdcInsn((float) mod);
+					mv.visitInsn(Opcodes.DADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+					mv.visitInsn(Opcodes.DUP);
+					curStack.add(new StackInfo(lils, mv.size()));
+					storeVar(node.GetFirstNode().value, node.prev);
+					break;
+				}
+				curStack.add(new StackInfo(lils, mv.size()));
+			}
+			return lils;
+		case "FEL": 
+			if (node.value.equals("E")) {
+				switch(lils) {
+				case "B", "C", "S", "I":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					mv.visitInsn(Opcodes.DUP_X1);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					storeField(node.GetFirstNode(), parent);
+					
+					break;
+				case "J":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					mv.visitInsn(Opcodes.DUP2_X1);
+					mv.visitLdcInsn((long) mod);
+					mv.visitInsn(Opcodes.LADD);
+					storeField(node.GetFirstNode(), parent);
+					
+					break;
+				case "F":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					mv.visitInsn(Opcodes.DUP_X1);
+					mv.visitLdcInsn((float) mod);
+					mv.visitInsn(Opcodes.FADD);
+					storeField(node.GetFirstNode(), parent);
+					
+					break;
+				case "D":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					mv.visitInsn(Opcodes.DUP2_X1);
+					mv.visitLdcInsn((double) mod);
+					mv.visitInsn(Opcodes.DADD);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Byte;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					mv.visitInsn(Opcodes.DUP_X1);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Short;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					mv.visitInsn(Opcodes.DUP_X1);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Integer;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					mv.visitInsn(Opcodes.DUP_X1);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Character;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					mv.visitInsn(Opcodes.DUP_X1);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Long;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					mv.visitInsn(Opcodes.DUP_X1);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false);
+					mv.visitLdcInsn((long) mod);
+					mv.visitInsn(Opcodes.LADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Float;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					mv.visitInsn(Opcodes.DUP_X1);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false);
+					mv.visitLdcInsn((float) mod);
+					mv.visitInsn(Opcodes.FADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Double;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					mv.visitInsn(Opcodes.DUP_X1);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false);
+					mv.visitLdcInsn((double) mod);
+					mv.visitInsn(Opcodes.DADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				}
+				
+			}
+			else {
+				switch(lils) {
+				case "B", "C", "S", "I":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitInsn(Opcodes.DUP_X1);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "J":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					
+					mv.visitLdcInsn((long) mod);
+					mv.visitInsn(Opcodes.LADD);
+					mv.visitInsn(Opcodes.DUP2_X1);
+					storeField(node.GetFirstNode(), parent);
+					
+					break;
+				case "F":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					
+					mv.visitLdcInsn((float) mod);
+					mv.visitInsn(Opcodes.FADD);
+					mv.visitInsn(Opcodes.DUP_X1);
+					storeField(node.GetFirstNode(), parent);
+					
+					break;
+				case "D":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					
+					mv.visitLdcInsn((double) mod);
+					mv.visitInsn(Opcodes.DADD);
+					mv.visitInsn(Opcodes.DUP2_X1);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Byte;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
+					mv.visitInsn(Opcodes.DUP_X1);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Short;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
+					mv.visitInsn(Opcodes.DUP_X1);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Integer;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+					mv.visitInsn(Opcodes.DUP_X1);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Character;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
+					mv.visitInsn(Opcodes.DUP_X1);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Long;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false);
+					mv.visitLdcInsn((long) mod);
+					mv.visitInsn(Opcodes.LADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+					mv.visitInsn(Opcodes.DUP_X1);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Float;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false);
+					mv.visitLdcInsn((float) mod);
+					mv.visitInsn(Opcodes.FADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
+					mv.visitInsn(Opcodes.DUP_X1);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				case "Ljava/lang/Double;":
+					mv.insert(new CrodotInsn(Opcodes.DUP),  s.posInQueue-1);
+					
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false);
+					mv.visitLdcInsn((double) mod);
+					mv.visitInsn(Opcodes.DADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+					mv.visitInsn(Opcodes.DUP_X1);
+					storeField(node.GetFirstNode(), parent);
+					break;
+				}
+			}
+			curStack.add(new StackInfo(lils, mv.size()));
+			return lils;
+		case "ARR":
+
+			if (node.value.equals("E")) {
+				StackInfo arr;
+				switch(lils) {
+				case "B", "C", "S", "I":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitInsn(Opcodes.DUP_X2);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					
+					break;
+				case "J":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitInsn(Opcodes.DUP2_X2);
+					mv.visitLdcInsn((long) mod);
+					mv.visitInsn(Opcodes.LADD);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					
+					break;
+				case "F":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitInsn(Opcodes.DUP_X2);
+					mv.visitLdcInsn((float) mod);
+					mv.visitInsn(Opcodes.FADD);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					
+					break;
+				case "D":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitInsn(Opcodes.DUP2_X2);
+					mv.visitLdcInsn((double) mod);
+					mv.visitInsn(Opcodes.DADD);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					
+					break;
+				case "Ljava/lang/Byte;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitInsn(Opcodes.DUP_X2);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				case "Ljava/lang/Short;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitInsn(Opcodes.DUP_X2);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				case "Ljava/lang/Integer;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitInsn(Opcodes.DUP_X2);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				case "Ljava/lang/Character;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitInsn(Opcodes.DUP_X2);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false);
+					mv.visitLdcInsn(mod);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				case "Ljava/lang/Long;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitInsn(Opcodes.DUP_X2);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false);
+					mv.visitLdcInsn((long) mod);
+					mv.visitInsn(Opcodes.LADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				case "Ljava/lang/Float;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitInsn(Opcodes.DUP_X2);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false);
+					mv.visitLdcInsn((float) mod);
+					mv.visitInsn(Opcodes.FADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				case "Ljava/lang/Double;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitInsn(Opcodes.DUP_X2);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false);
+					mv.visitLdcInsn((double) mod);
+					mv.visitInsn(Opcodes.DADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				}
+			}
+			else {
+				StackInfo arr;
+				switch(lils) {
+				case "B", "C", "S", "I":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitLdcInsn(1);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitInsn(Opcodes.DUP_X2);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					
+					break;
+				case "J":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitLdcInsn((long) 1);
+					mv.visitInsn(Opcodes.LADD);
+					mv.visitInsn(Opcodes.DUP2_X2);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					
+					break;
+				case "F":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitLdcInsn((float) 1);
+					mv.visitInsn(Opcodes.FADD);
+					mv.visitInsn(Opcodes.DUP_X2);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					
+					break;
+				case "D":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitLdcInsn((double) 1);
+					mv.visitInsn(Opcodes.DADD);
+					mv.visitInsn(Opcodes.DUP2_X2);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					
+					break;
+				case "Ljava/lang/Byte;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false);
+					mv.visitLdcInsn(1);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
+					mv.visitInsn(Opcodes.DUP_X2);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				case "Ljava/lang/Short;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false);
+					mv.visitLdcInsn(1);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
+					mv.visitInsn(Opcodes.DUP_X2);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				case "Ljava/lang/Integer;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false);
+					mv.visitLdcInsn(1);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+					mv.visitInsn(Opcodes.DUP_X2);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				case "Ljava/lang/Character;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false);
+					mv.visitLdcInsn(1);
+					mv.visitInsn(Opcodes.IADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
+					mv.visitInsn(Opcodes.DUP_X2);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				case "Ljava/lang/Long;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false);
+					mv.visitLdcInsn((long) 1);
+					mv.visitInsn(Opcodes.LADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+					mv.visitInsn(Opcodes.DUP_X2);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				case "Ljava/lang/Float;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false);
+					mv.visitLdcInsn((float) 1);
+					mv.visitInsn(Opcodes.FADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
+					mv.visitInsn(Opcodes.DUP_X2);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				case "Ljava/lang/Double;":
+					arr = curStack.pop();
+					mv.insert(new CrodotInsn(Opcodes.DUP),  arr.posInQueue);
+					mv.insert(new CrodotInsn(Opcodes.DUP_X1),  s.posInQueue);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false);
+					mv.visitLdcInsn((double) 1);
+					mv.visitInsn(Opcodes.DADD);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+					mv.visitInsn(Opcodes.DUP_X2);
+					storeArrforInc(node.GetFirstNode().value, lils);
+					break;
+				}
+			
+			}
+			break;
+		default:
+			break;
+			//error
+		}
+		return null;
+	}
+
 	public VarInfo getVar(String name) {
-		return varPos.get(varSwitch).get(name);
+		return vars.get(name);
 	}
 	
 	public String evalE(ASTNode node, String TypeExpected) {
+
 		switch(node.type) {
+		case TokenState.TRUEEQUALS, TokenState.NOTEQUALS, TokenState.TRUEGREATERTHAN, TokenState.TRUELESSTHAN, TokenState.GREATERTHAN, TokenState.LESSTHAN:
+			System.out.println("RANHERE");
+			return booleanOperator(node);
 		case TokenState.DOT:
 			if (node.GetNodeSize() < 3) {
 				evalE(node.GetFirstNode());
@@ -2533,10 +3958,15 @@ public class CodeCreator {
 			}
 		case TokenState.FUN:
 			curStack.push(new StackInfo(invokeEasy(node), mv.size()));
+
 			if (stackTop().equals("V")) {
 				return popStack();
 			}
 			return stackTop();
+		case TokenState.INCREMENT:
+			return EIncrement(node, 1);
+		case TokenState.DECREMENT:
+			return EIncrement(node, -1);
 		case TokenState.GENFUN:
 			curStack.push(new StackInfo(constWithGen(node), mv.size()));
 			return stackTop();
@@ -2558,7 +3988,22 @@ public class CodeCreator {
 			}
 			
 		case TokenState.ARR:
+			if (node.prev.type == TokenState.INCREMENT || node.prev.type == TokenState.DECREMENT) {
+
+				curStack.push(new StackInfo(loadVar(node.value, node), mv.size()));
+				if (curStack.peek().type.startsWith("FEL")) {
+					curStack.peek().type = curStack.peek().type.substring(3);
+				}
+				curStack.push(new StackInfo(LoadArrIndex(curStack.peek().type, node, 0), mv.size()));
+				curStack.peek().type = "ARR" + curStack.peek().type;
+				return curStack.peek().type;
+			}
 			return curStack.push(new StackInfo(LoadArrIndex(loadVar(node.value, node), node, 0), mv.size())).type;
+		case TokenState.NOT:
+			mv.visitLdcInsn(false);
+			evalE(node.GetFirstNode());
+			mv.visitInsn(Opcodes.IAND);
+			return "Z";
 		case TokenState.RIGHTBRACE:
 			return initArray(node);
 		case TokenState.CHAR:
@@ -2659,16 +4104,16 @@ public class CodeCreator {
 			switch(s2.type) {
 			case "Ljava/lang/String;":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(Z)Ljava/lang/String;", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(Z)Ljava/lang/String;", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
 				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
@@ -2678,15 +4123,15 @@ public class CodeCreator {
 		case "Ljava/lang/Boolean;":
 			switch(s2.type) {
 			case "Ljava/lang/String;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
 				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
@@ -2698,60 +4143,60 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(I)Ljava/lang/String;", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(I)Ljava/lang/String;", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
 				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
@@ -2761,72 +4206,72 @@ public class CodeCreator {
 		case "Ljava/lang/Byte;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
 				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
@@ -2836,72 +4281,72 @@ public class CodeCreator {
 		case "Ljava/lang/Short;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
 				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
@@ -2911,72 +4356,72 @@ public class CodeCreator {
 		case "Ljava/lang/Character;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
 				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
@@ -2986,72 +4431,72 @@ public class CodeCreator {
 		case "Ljava/lang/Integer;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IADD);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
 				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
@@ -3062,7 +4507,7 @@ public class CodeCreator {
 			switch(s2.type) {
 			case "B", "S", "I", "C":
 
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "J":
@@ -3070,58 +4515,58 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(J)Ljava/lang/String;", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(J)Ljava/lang/String;", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				
 				return "Ljava/lang/String;";
 			default:
@@ -3132,74 +4577,74 @@ public class CodeCreator {
 		case "Ljava/lang/Long;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LADD);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+1);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+1);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue+2);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue+2);
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/Object;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/Object;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				return "Ljava/lang/String;";
 			default:
 				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
@@ -3209,66 +4654,66 @@ public class CodeCreator {
 		case "F":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "F":
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(F)Ljava/lang/String;", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(F)Ljava/lang/String;", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
 				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
@@ -3278,74 +4723,74 @@ public class CodeCreator {
 		case "Ljava/lang/Float;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "F":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
 				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
@@ -3355,66 +4800,66 @@ public class CodeCreator {
 		case "D":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "D":
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "D";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "D";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "D";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "D";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "D";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "D";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(D)Ljava/lang/String;", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(D)Ljava/lang/String;", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
 				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
@@ -3424,75 +4869,75 @@ public class CodeCreator {
 		case "Ljava/lang/Double;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "F":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "D":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "D";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "D";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "D";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "D";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "D";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FADD);
 				return "D";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DADD);
 				return "D";
 			case "Ljava/lang/String;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
 				err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
@@ -3502,138 +4947,138 @@ public class CodeCreator {
 		case "Ljava/lang/String;":
 			switch(s2.type) {
 			case "B":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(B)Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(B)Ljava/lang/String;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			case "S":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(S)Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(S)Ljava/lang/String;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 				
 			case "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(C)Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(C)Ljava/lang/String;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 				
 			case "I":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(I)Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(I)Ljava/lang/String;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				
 				return "Ljava/lang/String;";
 			case "J":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(J)Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(J)Ljava/lang/String;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 				
 			case "F":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(F)Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(F)Ljava/lang/String;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				
 
 				return "Ljava/lang/String;";
 				
 			case "D":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(D)Ljava/lang/String;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(D)Ljava/lang/String;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				
 			
 				return "Ljava/lang/String;";
 				
 			case "Ljava/lang/String;":
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			default:
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				return "Ljava/lang/String;";
 			}
 			
 		default:
 			if (s2.type.equals("Ljava/lang/String;")) {
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
 				
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
 				//one before other for efficiency as it pushes
 				//one before other for efficiency as it pushes
-				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-2);
-				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-2);
+				mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+				mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
 				
 				
 				return "Ljava/lang/String;";
@@ -3657,46 +5102,46 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
@@ -3707,60 +5152,60 @@ public class CodeCreator {
 		case "Ljava/lang/Byte;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
@@ -3771,60 +5216,60 @@ public class CodeCreator {
 		case "Ljava/lang/Short;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
@@ -3835,60 +5280,60 @@ public class CodeCreator {
 		case "Ljava/lang/Character;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
@@ -3899,60 +5344,60 @@ public class CodeCreator {
 		case "Ljava/lang/Integer;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.ISUB);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
@@ -3964,7 +5409,7 @@ public class CodeCreator {
 			switch(s2.type) {
 			case "B", "S", "I", "C":
 
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "J":
@@ -3972,45 +5417,45 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
@@ -4021,63 +5466,63 @@ public class CodeCreator {
 		case "Ljava/lang/Long;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LSUB);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
@@ -4088,52 +5533,52 @@ public class CodeCreator {
 		case "F":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "F":
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
@@ -4144,62 +5589,62 @@ public class CodeCreator {
 		case "Ljava/lang/Float;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "F":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
@@ -4210,52 +5655,52 @@ public class CodeCreator {
 		case "D":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "D":
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "D";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "D";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "D";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "D";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "D";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "D";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
@@ -4266,63 +5711,63 @@ public class CodeCreator {
 		case "Ljava/lang/Double;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "F":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "D":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "D";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "D";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "D";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "D";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "D";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FSUB);
 				return "D";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DSUB);
 				return "D";
 			default:
@@ -4349,46 +5794,46 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
@@ -4399,60 +5844,60 @@ public class CodeCreator {
 		case "Ljava/lang/Byte;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
@@ -4463,60 +5908,60 @@ public class CodeCreator {
 		case "Ljava/lang/Short;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
@@ -4527,60 +5972,60 @@ public class CodeCreator {
 		case "Ljava/lang/Character;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
@@ -4591,60 +6036,60 @@ public class CodeCreator {
 		case "Ljava/lang/Integer;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IMUL);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
@@ -4656,7 +6101,7 @@ public class CodeCreator {
 			switch(s2.type) {
 			case "B", "S", "I", "C":
 
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "J":
@@ -4664,45 +6109,45 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
@@ -4713,63 +6158,63 @@ public class CodeCreator {
 		case "Ljava/lang/Long;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LMUL);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
@@ -4780,52 +6225,52 @@ public class CodeCreator {
 		case "F":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "F":
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
@@ -4836,62 +6281,62 @@ public class CodeCreator {
 		case "Ljava/lang/Float;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "F":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
@@ -4902,52 +6347,52 @@ public class CodeCreator {
 		case "D":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "D":
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "D";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "D";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "D";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "D";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "D";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "D";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
@@ -4958,63 +6403,63 @@ public class CodeCreator {
 		case "Ljava/lang/Double;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "F":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "D":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "D";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "D";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "D";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "D";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "D";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FMUL);
 				return "D";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DMUL);
 				return "D";
 			default:
@@ -5040,46 +6485,46 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
@@ -5090,60 +6535,60 @@ public class CodeCreator {
 		case "Ljava/lang/Byte;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
@@ -5154,60 +6599,60 @@ public class CodeCreator {
 		case "Ljava/lang/Short;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
@@ -5218,60 +6663,60 @@ public class CodeCreator {
 		case "Ljava/lang/Character;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
@@ -5282,60 +6727,60 @@ public class CodeCreator {
 		case "Ljava/lang/Integer;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IDIV);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
@@ -5347,7 +6792,7 @@ public class CodeCreator {
 			switch(s2.type) {
 			case "B", "S", "I", "C":
 
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "J":
@@ -5355,45 +6800,45 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
@@ -5404,63 +6849,63 @@ public class CodeCreator {
 		case "Ljava/lang/Long;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LDIV);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
@@ -5471,52 +6916,52 @@ public class CodeCreator {
 		case "F":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "F":
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
@@ -5527,62 +6972,62 @@ public class CodeCreator {
 		case "Ljava/lang/Float;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "F":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
@@ -5593,52 +7038,52 @@ public class CodeCreator {
 		case "D":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "D":
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "D";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "D";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "D";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "D";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "D";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "D";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
@@ -5649,63 +7094,63 @@ public class CodeCreator {
 		case "Ljava/lang/Double;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "F":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "D":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "D";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "D";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "D";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "D";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "D";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FDIV);
 				return "D";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DDIV);
 				return "D";
 			default:
@@ -5731,46 +7176,46 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
@@ -5781,60 +7226,60 @@ public class CodeCreator {
 		case "Ljava/lang/Byte;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
@@ -5845,60 +7290,60 @@ public class CodeCreator {
 		case "Ljava/lang/Short;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
@@ -5909,60 +7354,60 @@ public class CodeCreator {
 		case "Ljava/lang/Character;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
@@ -5973,60 +7418,60 @@ public class CodeCreator {
 		case "Ljava/lang/Integer;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.IREM);
 				return "I";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
@@ -6038,7 +7483,7 @@ public class CodeCreator {
 			switch(s2.type) {
 			case "B", "S", "I", "C":
 
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "J":
@@ -6046,45 +7491,45 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
@@ -6095,63 +7540,63 @@ public class CodeCreator {
 		case "Ljava/lang/Long;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2L), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.LREM);
 				return "J";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
@@ -6162,52 +7607,52 @@ public class CodeCreator {
 		case "F":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "F":
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
@@ -6218,62 +7663,62 @@ public class CodeCreator {
 		case "Ljava/lang/Float;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "F":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "D":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2F), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "F";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
@@ -6284,52 +7729,52 @@ public class CodeCreator {
 		case "D":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "J":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "F":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "D":
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "D";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "D";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "D";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "D";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "D";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "D";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
@@ -6340,63 +7785,63 @@ public class CodeCreator {
 		case "Ljava/lang/Double;":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "J":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "F":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "D":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			case "Ljava/lang/Byte;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "D";
 			case "Ljava/lang/Short;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "D";
 			case "Ljava/lang/Character;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "D";
 			case "Ljava/lang/Integer;":
-				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.I2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "D";
 			case "Ljava/lang/Long;":
-				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.L2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "D";
 			case "Ljava/lang/Float;":
-				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue-1);
+				mv.insert(new CrodotInsn(Opcodes.F2D), s2.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.FREM);
 				return "D";
 			case "Ljava/lang/Double;":
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue-1);
-				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue-1);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.visitInsn(Opcodes.DREM);
 				return "D";
 			default:
@@ -6440,7 +7885,7 @@ public class CodeCreator {
 					if (flag) {
 						
 						this.invokeSpecial("<init>", IfImport(tree.value), info.args.get(i).toArgs() + "V");
-						return strToByte(tree.value);
+						return "L" + IfImport(tree.value) + genToString(tree.Grab(TokenState.GENERIC));
 					}
 				}
 			}
@@ -6449,6 +7894,34 @@ public class CodeCreator {
 		}
 		
 		return null;
+	}
+
+	private String genToString(ASTNode gen) {
+		StringBuilder b = new StringBuilder("<");
+		for (int i = 0; i < gen.GetNodeSize(); i++) {
+			switch(gen.GetNode(i).type) {
+			case TokenState.CLASSNAME:
+				b.append(strToByte(gen.GetNode(i).value));
+				break;
+			case TokenState.INFERRED:
+				b.append('*');
+				break;
+			case TokenState.CLASSMODIFIER:
+				if (gen.GetNode(i).value.equals("extends")) {
+					b.append('+');
+				}
+				else {
+					b.append('-');
+				}
+				b.append(strToByte(gen.GetNode(i).GetNode(1).value));
+				break;
+			case TokenState.GENERIC:
+				b.append(genToString(gen.GetNode(i)));
+				break;
+			}
+			
+		}
+		return b.append(">;").toString();
 	}
 
 	private String typedGeneric(ASTNode gen) {
@@ -6579,11 +8052,14 @@ public class CodeCreator {
 				String valType;
 				for (int i = 0; i < node.GetNodeSize(); i++) {
 					evalE(node.GetNode(i), "I");
+					//check comment
+					popStack();
 				}
 				mv.visitMultiANewArrayInsn(valType = strToByte(node.value), node.GetNodeSize());
 				return valType;
 			}
 			evalE(node.GetFirstNode(), "I");
+			popStack();
 			switch(node.value) {
 			case "bool":
 				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
@@ -6622,6 +8098,7 @@ public class CodeCreator {
 			return LoadArrIndex(type.replaceFirst("\\[", ""), node, MatrixIndex + 1);
 		}
 		else {
+
 			switch(type) {
 			case "[I":
 				mv.visitInsn(Opcodes.IALOAD);
@@ -6730,26 +8207,79 @@ public class CodeCreator {
 		return (strToByte(temp.value.substring(0, temp.value.length()-slack)));
 		
 	}
+	
+	private void IfconditionalE(ASTNode node, Label label) {
+		switch(node.type) {
+		case TokenState.BOOLEAN:
+			if (node.value.equals("true")) {
+				mv.visitLdcInsn(1);
+			}
+			else {
+				mv.visitLdcInsn(0);
+			}
+			mv.visitJumpInsn(Opcodes.IFNE, label);
+			break;
+		case TokenState.TRUEEQUALS:
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
+			CNotEquals(label);
+			break;
+		case TokenState.NOTEQUALS:
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
+			CTrueEquals(label);
+			break;
+		case TokenState.TRUEGREATERTHAN:
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
+			CLessThan(label);
+			break;
+		case TokenState.TRUELESSTHAN:
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
+			CGreaterThan(label);
+			break;
+		case TokenState.GREATERTHAN:
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
+			CTrueLessThan(label);
+			break;
+		case TokenState.LESSTHAN:
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
+			CTrueGreaterThan(label);
+			break;
+		}
+		
+	}
 
 	public void If(ASTNode tree) {
 		//deprecated
+		//its the labelList
 		labelList.add(new Label());
 		labelList.add(new Label());
-		labelList.add(new Label());
-		conditionalE(tree, labelList.peek());
-		mv.visitJumpInsn(Opcodes.GOTO, labelList.get(labelList.size()-2));
-		mv.visitLabel(labelList.pop());
+		IfconditionalE(tree, labelList.peek());
 	}
+	
+	public void Elif(ASTNode tree) {
+		Label l = labelList.pop();
+		mv.visitJumpInsn(Opcodes.GOTO, labelList.peek());
+		labelList.add(new Label());
+		mv.visitLabel(l); 
+		IfconditionalE(tree, labelList.peek());
+	}
+
 	public void Else() {
+		Label l = labelList.pop();
+		mv.visitJumpInsn(Opcodes.GOTO, labelList.peek());
+		mv.visitLabel(l);
+	}
+	public void EndElse() {
 		mv.visitLabel(labelList.pop());
 	}
 	public void EndOfIf() {
-		mv.visitJumpInsn(Opcodes.GOTO, labelList.get(labelList.size()-2));
-	}
-	
-	public void EndElse() {
-		mv.visitJumpInsn(Opcodes.GOTO, labelList.peek());
 		mv.visitLabel(labelList.pop());
+		labelList.pop();
 	}
 	
 	public void While(ASTNode tree) {
@@ -6764,19 +8294,30 @@ public class CodeCreator {
 		mv.visitLabel(labelList.pop());
 	}
 	public void For(ASTNode tree) {
-		//keep in mind redoing parser needs redoing this
+
 		labelList.add(new Label());
 		labelList.add(new Label());
-		evalE(tree.GetFirstNode().GetNode(1));
-		newVar(tree.GetFirstNode().GetFirstNode().value, tree.GetFirstNode().value, null, tree.line);
+		
+		if (tree.GetFirstNode().type == TokenState.DECLARATION) {
+			evalE(tree.GetFirstNode().GetNode(1));
+			newVar(tree.GetFirstNode().GetFirstNode().value, tree.GetFirstNode().value, null, tree.line);
+		}
+		else {
+			evalE(tree.GetFirstNode().GetFirstNode());
+			newUnknownVar(tree.GetFirstNode().value);
+		}
 		conditionalE(tree.GetNode(1), labelList.peek());
 		mv.visitLabel(labelList.peek());
 	}
 	public void EndFor(ASTNode tree) {
 		evalE(tree.GetNode(2));
-		storeVar(tree.GetFirstNode().GetFirstNode().value, null);
+		if (tree.GetFirstNode().type == TokenState.DECLARATION) {
+			storeVar(tree.GetFirstNode().GetFirstNode().value, tree);
+		}
+		else {
+			storeVar(tree.GetFirstNode().value, tree);
+		}
 		conditionalE(tree.GetNode(1), labelList.pop());
-		mv.visitJumpInsn(Opcodes.GOTO, labelList.peek());
 		mv.visitLabel(labelList.pop());
 	}
 	
@@ -6789,7 +8330,6 @@ public class CodeCreator {
 				top = "[";
 			}
 			else {
-				System.out.println(top);
 				genType = sigToHash(top);
 				top = stripObj(top);
 			}
@@ -6809,15 +8349,17 @@ public class CodeCreator {
 			}
 
 			if (Methodinfo.length > 3 && Methodinfo[3] != null) {
-				System.out.println(Methodinfo[3]);
 				mv.visitTypeInsn(Opcodes.CHECKCAST, Methodinfo[3].substring(1, Methodinfo[3].length()-1));
 				return  Methodinfo[3];
 			}
 			return Methodinfo[1];
 		}
 		else if (constructorCheck(tree.value)){
+
 			Methodinfo = constructorDo(tree.value, tree);
 			invokeSpecial("<init>", IfImport(tree.value), Methodinfo[0] + Methodinfo[1]);
+
+			
 			return strToByte(tree.value);
 		}
 		else {
@@ -6836,7 +8378,6 @@ public class CodeCreator {
 	}
 	private LinkedHashMap<String, String> sigToHash(String stack) {
 		int splitpoint = stack.indexOf('<');
-		System.out.println(stack);
 		if (splitpoint < 0) return null;
 		int lastSlash = stack.substring(0, splitpoint).lastIndexOf('/');
 		if (lastSlash < 0) lastSlash = 0;
@@ -7008,6 +8549,31 @@ public class CodeCreator {
 		}
 		
 	}
+	void storeArrforInc(String name, String type) {
+		switch(type) {
+		case "I", "Z":
+			mv.visitInsn(Opcodes.IASTORE);
+			break;
+		case "B":
+			mv.visitInsn(Opcodes.BASTORE);
+			break;
+		case "S":
+			mv.visitInsn(Opcodes.SASTORE);
+			break;
+		case "C":
+			mv.visitInsn(Opcodes.CASTORE);
+			break;
+		case "D":
+			mv.visitInsn(Opcodes.DASTORE);
+			break;
+		case "F":
+			mv.visitInsn(Opcodes.FASTORE);
+			break;
+		default:
+			mv.visitInsn(Opcodes.AASTORE);
+			break;
+		}
+	}
 
 	public void storeArr(String name, ASTNode tree, ASTNode evalE) {
 		ASTNode temp = tree.GetFirstNode();
@@ -7161,6 +8727,10 @@ public class CodeCreator {
 		}
 		
 		return r.toString();
+	}
+	
+	VariableManager getVarManager() {
+		return vars;
 	}
 
 }

@@ -46,6 +46,10 @@ public class Generator {
 	public void decision(ASTNode tree) {
 
 		switch(tree.type) {
+		case TokenState.INCREMENT, TokenState.DECREMENT:
+			create.evalE(tree);
+			break;
+		
 		case TokenState.ACCESS:
 			decision(tree.GetFirstNode());
 			break;
@@ -64,11 +68,10 @@ public class Generator {
 			}
 			break;
 		case TokenState.DOT:
-			System.out.println("UNO");
 			create.evalE(tree);
 			break;
 		case TokenState.IDENTIFIER:
-			System.out.println("please say no");
+
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			lineCheck(tree);
 			if (tree.GetNodeSize() > 0) {
@@ -103,8 +106,9 @@ public class Generator {
 			}
 			break;
 		case TokenState.DECLARATION:
-			System.out.println("make sure");
+
 			if (!indentObj.isEmpty() && indentObj.peek().equals("class")) {
+
 				create.newField(tree.GetFirstNode().value, tree.value, Opcodes.ACC_PUBLIC, tree);
 			}
 			else {
@@ -121,6 +125,7 @@ public class Generator {
 				
 			}
 			
+
 			break;
 		case TokenState.DEFINITION:
 			indentObj.push("class");
@@ -150,9 +155,17 @@ public class Generator {
 		case TokenState.CONDITIONAL:
 			wanderingIf = create.accMain(unClass, unMethod, false);
 			lineCheck(tree);
+			create.getVarManager().createBlackPoint();
 			if (tree.value.equals("if")) {
 				create.If(tree.GetFirstNode());
 				indentObj.push("if");
+				for (int i = 0; i < tree.GetNode(1).GetNodeSize(); i++) {
+					decision(tree.GetNode(1).GetNode(i));
+				}
+			}
+			else if (tree.value.equals("elif")) {
+				create.Elif(tree.GetFirstNode());
+				indentObj.push("elif");
 				for (int i = 0; i < tree.GetNode(1).GetNodeSize(); i++) {
 					decision(tree.GetNode(1).GetNode(i));
 				}
@@ -170,6 +183,7 @@ public class Generator {
 		case TokenState.LOOP:
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			lineCheck(tree);
+			create.getVarManager().createBlackPoint();
 			if (tree.value.equals("while")) {
 				indentObj.push("while");
 				create.While(tree.GetFirstNode());
@@ -198,23 +212,26 @@ public class Generator {
 			case "method":
 				unMethod = create.closeMethod();
 				break;
-			case "if":
+			case "if", "elif":
 				lineCheck(tree);
-				create.EndOfIf();
 				wanderingIf = true;
+				create.getVarManager().blast();
 				break;
 			case "else":
 				lineCheck(tree);
 				create.EndElse();
 				wanderingIf = false;
+				create.getVarManager().blast();
 				break;
 			case "while":
 				lineCheck(tree);
 				create.EndWhile(tree.prev.prev.GetFirstNode());
+				create.getVarManager().blast();
 				break;
 			case "for":
 				lineCheck(tree);
 				create.EndFor(tree.prev.prev);
+				create.getVarManager().blast();
 				break;
 			}
 		}

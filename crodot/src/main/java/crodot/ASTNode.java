@@ -100,6 +100,14 @@ public class ASTNode {
 		System.out.println("                " + lastCheck);
 		System.out.println("                " + "DEBUGCHECKOVER");
 	}
+	
+	public void ForceSet(ASTNode node, int i ) {
+		next.set(i, node);
+	}
+	public void remove(ASTNode tree) {
+		next.remove(tree);
+		
+	}
 
 }
 

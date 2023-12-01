@@ -39,24 +39,41 @@ public class LexerAttempt3 {
 				genCounter.add(tokens.size()-1);
 			}
 			else if (type == TokenState.GREATERTHAN) {
-				int gc = genCounter.pop();
-				boolean flag = true;
-				for (int i = tokens.size()-2; i > gc; i--) {
-					if (!(tokens.get(i).type == TokenState.IDENTIFIER || tokens.get(i).type == TokenState.DECLARATION || tokens.get(i).type == TokenState.SEPERATOR || tokens.get(i).type == TokenState.LEFTGENERIC || tokens.get(i).type == TokenState.RIGHTGENERIC)) {
-						flag = false;
-						break;
+				if (!genCounter.isEmpty()) {
+					int gc = genCounter.pop();
+					boolean flag = true;
+					for (int i = tokens.size()-2; i > gc; i--) {
+						if (!(tokens.get(i).type == TokenState.IDENTIFIER || tokens.get(i).type == TokenState.DECLARATION || tokens.get(i).type == TokenState.SEPERATOR || tokens.get(i).type == TokenState.LEFTGENERIC || tokens.get(i).type == TokenState.RIGHTGENERIC)) {
+							flag = false;
+							break;
+						}
+					}
+					if (flag) {
+						tokens.get(gc).type = TokenState.LEFTGENERIC;
+						tokens.get(tokens.size()-1).type = TokenState.RIGHTGENERIC;
 					}
 				}
-				if (flag) {
-					tokens.get(gc).type = TokenState.LEFTGENERIC;
-					tokens.get(tokens.size()-1).type = TokenState.RIGHTGENERIC;
-				}
+				
 			}
 		}
 		else {
 			if (value.length() > 1) {
-				addSpecial(value.substring(0, value.length()-1));
-				addSpecial(value.substring(value.length()-1, value.length()));
+				int size = value.length()-1;
+				while (size > 0) {
+					for (int i = 0; i+size < value.length(); i++) {
+						if (specials.contains(value.substring(i, i+size))) {
+							if (i > 0) {
+								addSpecial(value.substring(0, i));
+							}
+								addSpecial(value.substring(i, i+size));
+							if (i+size < value.length()) {
+								addSpecial(value.substring(i+size, value.length()));
+							}
+							return;
+						}
+					}
+					size--;
+				}
 			}
 			else {
 				System.out.println("Unknown special");
@@ -65,8 +82,17 @@ public class LexerAttempt3 {
 	}
 	
 	public void addKeyword(String value) {
+		
 		if (words.contains(value)) {
-			tokens.add(new Token(words.get(value), value));
+			Token t;
+			tokens.add(t = new Token(words.get(value), value));
+			if (t.type == TokenState.CONDITIONAL && t.value.equals("if") && tokens.size() > 2) {
+				t = tokens.get(tokens.size()-2);
+				if (t.type == TokenState.CONDITIONAL && t.value.equals("else")) {
+					tokens.remove(tokens.size()-1);
+					t.value = "elif";
+				}
+			}
 		}
 		else {
 			tokens.add(new Token(TokenState.IDENTIFIER, value));

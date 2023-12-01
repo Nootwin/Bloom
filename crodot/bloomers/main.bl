@@ -1,3 +1,7 @@
-Julien<String> j = Julien<String>;
+int a = 1
+long b = 1
 
-print(j.swalalala("meow").charAt(2))
+
+bool doggy = a == b
+
+print(doggy)
