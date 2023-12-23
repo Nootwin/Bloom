@@ -201,6 +201,7 @@ public class Parser {
 			return postSolve(tree, start, end-1);
 		case TokenState.ARR:
 			brackets = 0;
+			System.out.println("postsolve");
 			for (int i = place+2; i < end+1; i++) {
 				if (code.get(i).type == TokenState.LEFTBRACE) {
 					brackets++;
@@ -208,6 +209,10 @@ public class Parser {
 				else if (code.get(i).type == TokenState.RIGHTBRACE) {
 					if (brackets == 0) {
 						tree.SetNode(postSolve(new ASTNode(tree, lineNum), place+1, i-1));
+						if (code.get(i+1).type != TokenState.LEFTBRACE) {
+							return tree; 
+						}
+						brackets--;
 					}
 					else {
 						brackets--;
@@ -309,6 +314,10 @@ public class Parser {
 		tree.value = code.get(place).value;
 		
 		switch (tree.type) {
+		case TokenState.EQUIVALENCY:
+			tree.SetNode(preSolve(new ASTNode(tree, lineNum), start, place-1));
+			tree.SetNode(postSolve(new ASTNode(tree, lineNum), place, end));
+			return tree;
 		case TokenState.ADD, TokenState.SUB, TokenState.MUL, TokenState.DIV, TokenState.REM, TokenState.EXP, TokenState.SEPERATOR, TokenState.TRUEEQUALS, TokenState.NOTEQUALS, TokenState.TRUEGREATERTHAN, TokenState.TRUELESSTHAN, TokenState.GREATERTHAN, TokenState.LESSTHAN:
 			tree.SetNode(postSolve(new ASTNode(tree, lineNum), start, place-1));
 			tree.SetNode(postSolve(new ASTNode(tree, lineNum), place, end));
@@ -449,6 +458,7 @@ public class Parser {
 			return tree;
 		case TokenState.ARR:
 			brackets = 0;
+			System.out.println("postsolve");
 			for (int i = place+2; i < end+1; i++) {
 				if (code.get(i).type == TokenState.LEFTBRACE) {
 					brackets++;
@@ -657,6 +667,15 @@ public class Parser {
 			}
 			break;
 		case TokenState.EQUIVALENCY :
+			if (!code.get(p).value.equals("=")) {
+				ASTNode parent = cur.prev;
+				ASTNode newOne = new ASTNode(parent, TokenState.EQUIVALENCY, code.get(p).value, lineNum);
+				parent.remove(cur);
+				parent.SetNode(newOne);
+				cur.prev = newOne;
+				newOne.SetNode(cur);
+				cur = newOne;
+			}
 			for (int i = p; i < code.size(); i++) {
 				if (code.get(i).type == TokenState.ENDOFLINE || code.get(i).type == TokenState.LEFTCURLY) {
 					cur.SetNode(postSolve(new ASTNode(cur, lineNum), p, i-1));
@@ -746,8 +765,15 @@ public class Parser {
 
 				return p+1;
 			default:
+				int b = 0;
 				for (int j = p+1; j < code.size(); j++) {
-					if (code.get(j).type == TokenState.ENDOFLINE ||  code.get(j).type == TokenState.EQUIVALENCY) {
+					if (code.get(j).type == TokenState.LEFTBRACKET) {
+						b++;
+					}
+					else if (code.get(j).type == TokenState.RIGHTBRACKET) {
+						b--;
+					}
+					else if (b == 0 && (code.get(j).type == TokenState.ENDOFLINE || code.get(j).type == TokenState.EQUIVALENCY)) {
 						cur.SetNode(preSolve(new ASTNode(cur, lineNum), p-1, j-1));
 						cur = cur.GetLastNode();
 						System.out.println(j);

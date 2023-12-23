@@ -9,6 +9,11 @@ public class LexerSpecials {
 	
 	public LexerSpecials() {
 		s.put("=", TokenState.EQUIVALENCY);
+		s.put("+=", TokenState.EQUIVALENCY);
+		s.put("*=", TokenState.EQUIVALENCY);
+		s.put("-=", TokenState.EQUIVALENCY);
+		s.put("/=", TokenState.EQUIVALENCY);
+		s.put("%=", TokenState.EQUIVALENCY);
 		s.put(".", TokenState.DOT);
 		s.put(">", TokenState.GREATERTHAN);
 		s.put("<", TokenState.LESSTHAN);

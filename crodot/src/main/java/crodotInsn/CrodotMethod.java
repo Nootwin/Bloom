@@ -22,5 +22,9 @@ public class CrodotMethod extends CrodotCode {
 		mv.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
 	}
 	
+	public String toString() {
+		return "mv.visitMethodInsn(" + opcode + ", " + owner + ", " + name + ", " + descriptor + ", " + isInterface + ");";
+	}
+	
 	
 }

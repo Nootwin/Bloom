@@ -38,6 +38,9 @@ public class Generator {
 			
 		}
 		
+		if (wanderingIf) {
+			create.EndOfIf();
+		}
 		create.closeMain();
 		create.saveMain();
 		create.runClass("Main");
@@ -46,7 +49,8 @@ public class Generator {
 	public void decision(ASTNode tree) {
 
 		switch(tree.type) {
-		case TokenState.INCREMENT, TokenState.DECREMENT:
+		case TokenState.INCREMENT, TokenState.DECREMENT, TokenState.EQUIVALENCY:
+			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			create.evalE(tree);
 			break;
 		
@@ -75,13 +79,12 @@ public class Generator {
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			lineCheck(tree);
 			if (tree.GetNodeSize() > 0) {
-				if (create.getVar(null) != null) {
-					create.evalE(tree.GetFirstNode(), create.getVar(tree.GetFirstNode().value).type);
+				if (create.getVar(tree.value) != null) {
+					create.evalE(tree.GetFirstNode(), create.getVar(tree.value).type);
 					create.storeVar(tree.value, tree);
 				}
 				else {
 					create.evalE(tree.GetFirstNode());
-					
 					create.newUnknownVar(tree.value);
 				}
 				
