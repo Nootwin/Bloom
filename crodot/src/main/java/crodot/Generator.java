@@ -43,7 +43,7 @@ public class Generator {
 		}
 		create.closeMain();
 		create.saveMain();
-		create.runClass("Main");
+		create.runClass(err.outputLoc + "\" Main");
 	}
 	
 	public void decision(ASTNode tree) {
@@ -64,7 +64,7 @@ public class Generator {
 			if (tree.value.equals("print")) {
 				create.staticField("out", "java/lang/System", "Ljava/io/PrintStream;");
 				create.evalE(tree.GetLastNode());
-				printType = create.checkMethodvStack("println", "PrintStream", 1, tree.line);
+				printType = create.checkMethodvStack("println", "java/io/PrintStream", 1, tree.line);
 				create.invokePublic("println", "java/io/PrintStream", printType[0] + "V");
 			}
 			else {
@@ -80,8 +80,12 @@ public class Generator {
 			lineCheck(tree);
 			if (tree.GetNodeSize() > 0) {
 				if (create.getVar(tree.value) != null) {
+					if (create.getVar(tree.value) instanceof GenVarInfo) {
+						create.curGenType = ((GenVarInfo) create.getVar(tree.value)).InferredTypes;
+					}
 					create.evalE(tree.GetFirstNode(), create.getVar(tree.value).type);
 					create.storeVar(tree.value, tree);
+					create.curGenType = null;
 				}
 				else {
 					create.evalE(tree.GetFirstNode());
@@ -119,6 +123,10 @@ public class Generator {
 				wanderingIf = create.accMain(unClass, unMethod, wanderingIf); 
 				lineCheck(tree);
 				if (tree.GetNodeSize() > 1) {
+					if (tree.Grab(TokenState.GENERIC) != null) {
+						create.setCurGenType(tree.Grab(TokenState.GENERIC), tree.value);
+					}
+						
 					create.evalE(tree.GetNode(1), create.strToByte(tree.value));
 					create.newVar(tree.GetFirstNode().value, tree.value, tree.Grab(TokenState.GENERIC), tree.line);
 				}

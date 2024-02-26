@@ -7,7 +7,6 @@ import java.util.Set;
 
 
 public class ClassInfo {
-	String name;
 	String parent;
 	boolean construct;
 	int AccessOpcode;
@@ -17,8 +16,7 @@ public class ClassInfo {
 	LinkedHashMap<String, String> genType;
 	
 	
-	ClassInfo(String name) {
-		this.name = name;
+	ClassInfo() {
 		construct = false;
 		methods = new HashMap<>();
 		fields = new HashMap<>();

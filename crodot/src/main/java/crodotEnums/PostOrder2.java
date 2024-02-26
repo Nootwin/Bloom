@@ -27,17 +27,20 @@ public class PostOrder2 {
 		map.put(TokenState.INCREMENT, 4);
 		map.put(TokenState.DECREMENT, 4);
 		map.put(TokenState.DOT, 5);
+
 		map.put(TokenState.IDENTIFIER, 6);
 		map.put(TokenState.DECLARATION, 6);
 		map.put(TokenState.NUMBER, 6);
 		map.put(TokenState.STRING, 6);
 		map.put(TokenState.CHAR, 6);
 		map.put(TokenState.BOOLEAN, 6);
+		map.put(TokenState.LEFTCAST, 8);
 		map.put(TokenState.RIGHTBRACE, 7);
 		map.put(TokenState.RIGHTBRACKET, 7);
 		map.put(TokenState.LEFTBRACE, 8);
 		map.put(TokenState.LEFTBRACKET, 8);
 		map.put(TokenState.RIGHTGENERIC, 8);
+		map.put(TokenState.RIGHTCAST, 8);
 //		FUN(6),
 //		ARR(6),
 //		GENFUN(6),

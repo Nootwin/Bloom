@@ -47,6 +47,7 @@ public class CodeCreator {
 	AnaResults results;
 	private ArrayList<Integer> getAllRangeStackPos;
 	private VariableManager vars;
+	LinkedHashMap<String, String> curGenType;
 	
 	
 	CodeCreator(AnaResults results, ErrorThrower err, String sourceFile) {
@@ -72,6 +73,54 @@ public class CodeCreator {
 		vars.setMainLength(1);
 //		varCount[0] = 1;
 		labelList = new Stack<>();
+	}
+	
+	public void setCurGenType(ASTNode gen, String name) {
+		if (gen == null) {
+			curGenType = null;
+			return;
+		}
+		curGenType = createGenType(gen, name);
+	}
+	
+	public LinkedHashMap<String, String> createGenType(ASTNode gen, String name) {
+		String type = IfImport(name);
+		LinkedHashMap<String, String> map = new LinkedHashMap<>();;
+		ClassInfo info = results.Classes.get(type);
+		Iterator<String> keys = info.genType.keySet().iterator();
+		StringBuilder sig = new StringBuilder();
+		for (int i = 0; i < info.genType.size(); i++) {
+			map.put(keys.next(), nodeToString(gen.GetNode(i), info));
+		}
+		
+		return map;
+	}
+	
+	public String nodeToString(ASTNode node, ClassInfo info) {
+		StringBuilder sig = new StringBuilder();
+		if (info.canGeneric() && info.genType.containsKey(("T" + node.value + ";"))) {
+			sig.append("T");
+			sig.append(node.value);
+			sig.append(";");
+		}
+		else {
+			sig.append("L");
+			if (results.qNames.containsKey(node.value)) {
+				sig.append(results.qNames.get(node.value));
+			}
+			else {
+				sig.append(node.value);
+			}
+			if (node.GetNodeSize() > 0) {
+				sig.append("<");
+				for (int i = 0; i < node.GetNodeSize(); i++) {
+					sig.append(nodeToString(node.GetNode(i), info));
+				}
+				sig.append(">");
+			}
+			sig.append(";");
+		}
+		return sig.toString();
 	}
 	
 	public void ClearStack() {
@@ -100,6 +149,7 @@ public class CodeCreator {
 					flag = true;
 					for (int j = 0; j < stacks.size(); j++) {
 						if ((indexOf = stacks.get(j).indexOf(info.args.get(i).get(j))) != -1) {
+						
 							tempPrio[j+1] = indexOf;
 						}
 						else {
@@ -143,13 +193,24 @@ public class CodeCreator {
 	}
 	
 	public void storeField(ASTNode eval, StackInfo parent) {
+		String name;
 		if (eval.prev.prev.type == TokenState.DOT) {
-			ClassInfo info = results.Classes.get(stripObj(parent.type));
-			mv.visitFieldInsn(Opcodes.PUTFIELD, info.name, eval.value, info.fields.get(eval.value).type);
+			ClassInfo info = results.Classes.get(name = stripToImport(parent.type));
+			mv.visitFieldInsn(Opcodes.PUTFIELD, name, eval.value, info.fields.get(eval.value).type);
 		}
 		else {
 			ClassInfo info = results.Classes.get(curName);
-			mv.visitFieldInsn(Opcodes.PUTFIELD, info.name, eval.value, info.fields.get(eval.value).type);
+			mv.visitFieldInsn(Opcodes.PUTFIELD, curName, eval.value, info.fields.get(eval.value).type);
+		}
+	}
+	
+	public String stripToImport(String type) {
+		int i;
+		if ((i = type.indexOf("<")) == -1) {
+			return type.substring(1, type.length()-1);
+		}
+		else {
+			return type.substring(1, i);
 		}
 	}
 	
@@ -159,28 +220,28 @@ public class CodeCreator {
 			if (stacks.get(i).get(0).length() < 2 && argsList.get(i).length() > 1 && stacks.get(i).get(0) != argsList.get(i) ) {
 				switch(stacks.get(i).get(0)) {
 				case "Z":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false), getAllRangeStackPos.get(i)-1);
+					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false), getAllRangeStackPos.get(i));
 					break;
 				case "B":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false), getAllRangeStackPos.get(i)-1);
+					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false), getAllRangeStackPos.get(i));
 					break;
 				case "S":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false), getAllRangeStackPos.get(i)-1);
+					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false), getAllRangeStackPos.get(i));
 					break;
 				case "I":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false), getAllRangeStackPos.get(i)-1);
+					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false), getAllRangeStackPos.get(i));
 					break;
 				case "C":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false), getAllRangeStackPos.get(i)-1);
+					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false), getAllRangeStackPos.get(i));
 					break;
 				case "F":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false), getAllRangeStackPos.get(i)-1);
+					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false), getAllRangeStackPos.get(i));
 					break;
 				case "D":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false), getAllRangeStackPos.get(i)-1);
+					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false), getAllRangeStackPos.get(i));
 					break;
 				case "J":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false), getAllRangeStackPos.get(i)-1);
+					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false), getAllRangeStackPos.get(i));
 					break;
 				}
 
@@ -282,7 +343,7 @@ public class CodeCreator {
 				return entry.getValue();
 			}	
 		}
-		return null;
+		return returner;
 	}
 
 
@@ -385,25 +446,58 @@ public class CodeCreator {
 		
 	}
 	private String[] constructorDo(String Classname, ASTNode tree) {
+		int[] priority = null;
+		int[] tempPrio;
 		boolean flag;
-		mv.visitTypeInsn(Opcodes.NEW, IfImport(Classname));
+		int indexOf;
+		String type = IfImport(Classname);
+		mv.visitTypeInsn(Opcodes.NEW, type);
 		mv.visitInsn(Opcodes.DUP);
-		size = curStack.size();
 		if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
-		MethodInfo info = results.Classes.get(Classname).methods.get(Classname);
-		ArrayList<ArrayList<String>> stacks = getAllRangeStack(curStack.size()-size);
+		size = curStack.size();
+		MethodInfo info = results.Classes.get(type).methods.get(type);
+		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
 		if ((!Objects.isNull(info))) {
 			for (int i = 0; i < info.args.size(); i++) {
 				if (info.args.get(i).size() == stacks.size()) {
+					tempPrio = new int[size+1];
+					tempPrio[0] = i;
 					flag = true;
 					for (int j = 0; j < stacks.size(); j++) {
-						if (!stacks.get(j).contains(info.args.get(i).get(j))) {
+						if ((indexOf = stacks.get(j).indexOf(info.args.get(i).get(j))) != -1) {
+							tempPrio[j+1] = indexOf;
+						}
+						else {
 							flag = false;
+							break;
 						}
 					}
 					if (flag) {
-						return new String[] {info.args.get(i).toArgs(), "V", "public"};
-					}
+						if (priority == null) {
+							priority = tempPrio;
+						}
+						else {
+							int turner = 0;
+							for (int k = 1; k < tempPrio.length; k++) {
+								turner += priority[k] - tempPrio[k];
+							}
+							if (turner > 0) {
+								priority = tempPrio;
+							}
+							else if (turner == 0) {
+								//err
+							}
+						}
+					}	
+				}
+			}
+			if (priority != null) {
+				addCastings(info.args.get(priority[0]), stacks);
+				if (results.Classes.get(curName).canGeneric()) {
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(curName).genType), "V", "public"};
+				}
+				else {
+					return new String[] {info.args.get(priority[0]).toArgs(), "V", "public"};
 				}
 			}
 				
@@ -664,8 +758,8 @@ public class CodeCreator {
 	
 	public String IfImport(String type) {
 
-		if (results.Classes.containsKey(type)) {
-			return results.Classes.get(type).name;
+		if (results.qNames.containsKey(type)) {
+			return results.qNames.get(type);
 		}
 
 		return type;
@@ -849,7 +943,7 @@ public class CodeCreator {
 			vars.add(name, new VarInfo(name, conf, type, vars.getLength()));
 		}
 		else {
-			vars.add(name, new GenVarInfo(name, conf, type, vars.getLength()).AddGenerics(generic, results, type));
+			vars.add(name, new GenVarInfo(name, conf, type, vars.getLength()).AddGenerics(generic, results, IfImport(type)));
 		}
 		if (conf.equals("J") || conf.equals("D")) {
 			vars.Inc();
@@ -950,8 +1044,9 @@ public class CodeCreator {
 				add = "";
 			}
 			ClassInfo info;
+			String prev;
 			if (node.prev.type == TokenState.DOT) {
-				String prev = stripObj(curStack.pop().type);
+				prev = stripToImport(curStack.pop().type);
 				if (prev.startsWith("[")) {
 					mv.visitInsn(Opcodes.ARRAYLENGTH);
 					return "I";
@@ -961,14 +1056,14 @@ public class CodeCreator {
 				}
 			}
 			else {
-				info = results.Classes.get(curName);
+				info = results.Classes.get(prev = curName);
 				mv.visitVarInsn(Opcodes.ALOAD, 0);
 				
 			}
 
 			if (info.fields.containsKey(name)) {
 
-				mv.visitFieldInsn(Opcodes.GETFIELD, info.name, name, info.fields.get(name).type);
+				mv.visitFieldInsn(Opcodes.GETFIELD, prev, name, info.fields.get(name).type);
 				return add + info.fields.get(name).type;
 				
 			}
@@ -1016,17 +1111,18 @@ public class CodeCreator {
 		else {
 			StackInfo s = curStack.pop();
 			ClassInfo info;
+			String typeName;
 			if (node.prev.type == TokenState.DOT) {
-				info = results.Classes.get(stripObj(curStack.pop().type));
+				info = results.Classes.get(typeName = stripToImport(curStack.pop().type));
 			}
 			else {
-				info = results.Classes.get(curName);
+				info = results.Classes.get(typeName = curName);
 				mv.insert(new CrodotVar(Opcodes.ALOAD, s.posInQueue), size);
 			}
 			
 			if (info.fields.containsKey(name)) {
 				castTopStackForVar(info.fields.get(name).type ,s.type, node.line);
-				mv.visitFieldInsn(Opcodes.PUTFIELD, info.name, name, info.fields.get(name).type);
+				mv.visitFieldInsn(Opcodes.PUTFIELD, typeName, name, info.fields.get(name).type);
 			}
 			else {
 				//err
@@ -1636,7 +1732,10 @@ public class CodeCreator {
 				return;
 			}
 		default:
-			return;
+			if (!targetStack.equals(curStack)) {
+				mv.visitTypeInsn(Opcodes.CHECKCAST, stripToImport(targetStack));
+			}
+			break;
 		}
 		
 		
@@ -2607,6 +2706,8 @@ public class CodeCreator {
 	
 	public String evalE(ASTNode node) {
 		switch(node.type) {
+		case TokenState.CAST:
+			return Cast(node);
 		case TokenState.EQUIVALENCY:
 			if (node.value.equals("=") || node.prev.type != TokenState.CODE || node.prev.type != TokenState.START) {
 				return curStack.push(new StackInfo(equalsInStatement(node, true), mv.size())).type;
@@ -2636,13 +2737,12 @@ public class CodeCreator {
 			return EIncrement(node, -1);
 		case TokenState.FUN:
 			curStack.push(new StackInfo(invokeEasy(node), mv.size()));
-
 			if (stackTop().equals("V")) {
 				return popStack();
 			}
 			return stackTop();
 		case TokenState.GENFUN:
-			curStack.push(new StackInfo(constWithGen(node), mv.size()));
+			curStack.push(new StackInfo(constWithGen(node, null), mv.size()));
 			return stackTop();
 		case TokenState.IDENTIFIER:
 			curStack.push(new StackInfo(loadVar(node.value, node), mv.size()));
@@ -2734,6 +2834,36 @@ public class CodeCreator {
 		return "NULL";
 	}
 	
+//	private LinkedHashMap<String, String> GenToHash(ClassInfo info, ASTNode gen) {
+//		LinkedHashMap<String, String> genType = new LinkedHashMap<String, String>();
+//		Iterator<String> keys = info.genType.keySet().iterator();
+//		StringBuilder sig = new StringBuilder();
+//		for (int i = 0; i < info.genType.size(); i++) {
+//			nodeToString(genNode.GetNode(i), results, parentClass);
+//			genType.put(keys.next(), sig.toString());
+//			sig.setLength(0);
+//		}// TODO Auto-generated method stub
+//		return genType;
+//	}
+
+	private String Cast(ASTNode node) {
+		
+		String type = IfImport(node.value);
+		ClassInfo info;
+		if (type.equals("str")) {
+			type = "java/lang/String";
+			info = results.Classes.get("java/lang/String");
+		}
+		else {
+			info = results.Classes.get(type);
+		}
+		
+		evalE(node.GetFirstNode());
+		popStack();
+		mv.visitTypeInsn(Opcodes.CHECKCAST, type);
+		return type;
+	}
+
 	private String equalsInStatement(ASTNode node, boolean leave) {
 		String parent;
 		String setTo;
@@ -2741,7 +2871,6 @@ public class CodeCreator {
 		ASTNode right = node.GetNode(1);
 		switch(left.type) {
 		case TokenState.IDENTIFIER:
-			System.out.println(node.value);
 			switch(node.value) {
 			case "+=":
 				setTo = Add(new StackInfo(loadVar(left.value, left), mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
@@ -2777,9 +2906,10 @@ public class CodeCreator {
 		case TokenState.DOT:
 			parent = evalE(left.GetFirstNode());
 			curStack.pop();
-			ClassInfo info = results.Classes.get(stripObj(parent));
+			String partype;
+			ClassInfo info = results.Classes.get(partype = stripToImport(parent));
 			if (left.GetNode(1).type == TokenState.ARR) {
-				mv.visitFieldInsn(Opcodes.GETFIELD, info.name, left.GetNode(1).value, info.fields.get(left.GetNode(1).value).type);
+				mv.visitFieldInsn(Opcodes.GETFIELD, partype, left.GetNode(1).value, info.fields.get(left.GetNode(1).value).type);
 				
 				String parent2 = info.fields.get(left.GetNode(1).value).type;
 				for (int i = 0; i < left.GetNode(1).GetNodeSize()-1; i++) {
@@ -2865,27 +2995,27 @@ public class CodeCreator {
 				switch(node.value) {
 				case "+=":
 					mv.visitInsn(Opcodes.DUP);
-					mv.visitFieldInsn(Opcodes.GETFIELD, info.name, left.GetNode(1).value, type);
+					mv.visitFieldInsn(Opcodes.GETFIELD, partype, left.GetNode(1).value, type);
 					setTo = Add(new StackInfo(type, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
 					break;
 				case "-=":
 					mv.visitInsn(Opcodes.DUP);
-					mv.visitFieldInsn(Opcodes.GETFIELD, info.name, left.GetNode(1).value, type);
+					mv.visitFieldInsn(Opcodes.GETFIELD, partype, left.GetNode(1).value, type);
 					setTo = Sub(new StackInfo(type, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
 					break;
 				case "*=":
 					mv.visitInsn(Opcodes.DUP);
-					mv.visitFieldInsn(Opcodes.GETFIELD, info.name, left.GetNode(1).value, type);
+					mv.visitFieldInsn(Opcodes.GETFIELD, partype, left.GetNode(1).value, type);
 					setTo = Div(new StackInfo(type, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
 					break;
 				case "/=":
 					mv.visitInsn(Opcodes.DUP);
-					mv.visitFieldInsn(Opcodes.GETFIELD, info.name, left.GetNode(1).value, type);
+					mv.visitFieldInsn(Opcodes.GETFIELD, partype, left.GetNode(1).value, type);
 					setTo = Mul(new StackInfo(type, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
 					break;
 				case "%=":
 					mv.visitInsn(Opcodes.DUP);
-					mv.visitFieldInsn(Opcodes.GETFIELD, info.name, left.GetNode(1).value, type);
+					mv.visitFieldInsn(Opcodes.GETFIELD, partype, left.GetNode(1).value, type);
 					setTo = Rem(new StackInfo(type, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
 					break;
 				default:
@@ -2900,7 +3030,7 @@ public class CodeCreator {
 						mv.visitInsn(Opcodes.DUP_X1);
 					}
 				}
-				mv.visitFieldInsn(Opcodes.PUTFIELD, info.name, left.GetNode(1).value, type);
+				mv.visitFieldInsn(Opcodes.PUTFIELD,  partype, left.GetNode(1).value, type);
 				curStack.pop();
 				return type;
 			}
@@ -4436,13 +4566,14 @@ public class CodeCreator {
 	public String evalE(ASTNode node, String TypeExpected) {
 
 		switch(node.type) {
+		case TokenState.CAST:
+			return Cast(node);
 		case TokenState.EQUIVALENCY:
 			if (node.value.equals("=") || node.prev.type != TokenState.CODE || node.prev.type != TokenState.START) {
 				return curStack.push(new StackInfo(equalsInStatement(node, true), mv.size())).type;
 			}
 			return equalsInStatement(node, false);
 		case TokenState.TRUEEQUALS, TokenState.NOTEQUALS, TokenState.TRUEGREATERTHAN, TokenState.TRUELESSTHAN, TokenState.GREATERTHAN, TokenState.LESSTHAN:
-			System.out.println("RANHERE");
 			return booleanOperator(node);
 		case TokenState.DOT:
 			if (node.GetNodeSize() < 3) {
@@ -4467,7 +4598,14 @@ public class CodeCreator {
 		case TokenState.DECREMENT:
 			return EIncrement(node, -1);
 		case TokenState.GENFUN:
-			curStack.push(new StackInfo(constWithGen(node), mv.size()));
+			//err
+			if (curGenType == null) {
+				curStack.push(new StackInfo(constWithGen(node, createGenType(node.Grab(TokenState.GENERIC), node.value)), mv.size()));
+			}
+			else if (node.Grab(TokenState.GENERIC).GetNodeSize() < 1) {
+				curStack.push(new StackInfo(constWithGen(node, curGenType), mv.size()));
+			}
+			
 			return stackTop();
 		case TokenState.IDENTIFIER:
 			
@@ -8724,34 +8862,73 @@ public class CodeCreator {
 	
 	
 	
-	private String constWithGen(ASTNode tree) {
+	private String constWithGen(ASTNode tree, LinkedHashMap<String, String> genTypeInfo) {
+		String type = IfImport(tree.value);
+		int[] priority = null;
+		int[] tempPrio;
 		boolean flag;
-		mv.visitTypeInsn(Opcodes.NEW, IfImport(tree.value));
+		int indexOf;
+		mv.visitTypeInsn(Opcodes.NEW, type);
 		mv.visitInsn(Opcodes.DUP);
-		size = curStack.size();
 		if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
-		MethodInfo info = results.Classes.get(tree.value).methods.get(tree.value);
-		ArrayList<ArrayList<String>> stacks = getAllRangeStack(curStack.size()-size);
+		size = curStack.size();
+		MethodInfo info = results.Classes.get(type).methods.get(type);
+		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
 		if ((!Objects.isNull(info))) {
 			for (int i = 0; i < info.args.size(); i++) {
 				if (info.args.get(i).size() == stacks.size()) {
-					flag = true;
-					for (int j = 0; j < stacks.size(); j++) {
-						if (!stacks.get(j).contains(info.args.get(i).get(j))) {
-							flag = false;
+					if (info.args.get(i).size() == stacks.size()) {
+						tempPrio = new int[size+1];
+						tempPrio[0] = i;
+						flag = true;
+						for (int j = 0; j < stacks.size(); j++) {
+							if ((indexOf = stacks.get(j).indexOf(info.args.get(i).get(j))) != -1) {
+								tempPrio[j+1] = indexOf;
+							}
+							else {
+								flag = false;
+								break;
+							}
 						}
-					}
-					if (flag) {
-						
-						this.invokeSpecial("<init>", IfImport(tree.value), info.args.get(i).toArgs() + "V");
-						return "L" + IfImport(tree.value) + genToString(tree.Grab(TokenState.GENERIC));
+						if (flag) {
+							if (priority == null) {
+								priority = tempPrio;
+							}
+							else {
+								int turner = 0;
+								for (int k = 1; k < tempPrio.length; k++) {
+									turner += priority[k] - tempPrio[k];
+								}
+								if (turner > 0) {
+									priority = tempPrio;
+								}
+								else if (turner == 0) {
+									//err
+								}
+							}
+						}	
 					}
 				}
+				if (priority != null) {
+					addCastings(info.args.get(priority[0]), stacks);
+					if (results.Classes.get(curName).canGeneric()) {
+						this.invokeSpecial("<init>", IfImport(tree.value), replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(curName).genType) , results.Classes.get(type).genType) + "V");
+						return "L" + IfImport(tree.value) + genToString(tree.Grab(TokenState.GENERIC));
+					
+					}
+					else {
+						this.invokeSpecial("<init>", IfImport(tree.value), replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(type).genType) + "V");
+						return "L" + IfImport(tree.value) + genToString(tree.Grab(TokenState.GENERIC));
+					}
+					
+				}
 			}
-				
+			
+			
 			
 		}
 		
+		err.UnknownConstructorException(tree.line, tree.value, stacks);
 		return null;
 	}
 
@@ -8782,6 +8959,8 @@ public class CodeCreator {
 		}
 		return b.append(">;").toString();
 	}
+	
+
 
 	private String typedGeneric(ASTNode gen) {
 
@@ -9366,6 +9545,7 @@ public class CodeCreator {
 	
 	public String invokeEasy(ASTNode tree) {
 		String[] Methodinfo;
+		String longname = IfImport(tree.value);
 		if (tree.prev.type == TokenState.DOT) {
 			LinkedHashMap<String, String> genType = null;
 			top = curStack.pop().type;
@@ -9374,7 +9554,7 @@ public class CodeCreator {
 			}
 			else {
 				genType = sigToHash(top);
-				top = stripObj(top);
+				top = stripToImport(top);
 			}
 			size = curStack.size();
 			if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
@@ -9397,10 +9577,10 @@ public class CodeCreator {
 			}
 			return Methodinfo[1];
 		}
-		else if (constructorCheck(tree.value)){
+		else if (constructorCheck(longname)){
 
-			Methodinfo = constructorDo(tree.value, tree);
-			invokeSpecial("<init>", IfImport(tree.value), Methodinfo[0] + Methodinfo[1]);
+			Methodinfo = constructorDo(longname, tree);
+			invokeSpecial("<init>", longname, Methodinfo[0] + Methodinfo[1]);
 
 			
 			return strToByte(tree.value);
@@ -9422,11 +9602,9 @@ public class CodeCreator {
 	private LinkedHashMap<String, String> sigToHash(String stack) {
 		int splitpoint = stack.indexOf('<');
 		if (splitpoint < 0) return null;
-		int lastSlash = stack.substring(0, splitpoint).lastIndexOf('/');
-		if (lastSlash < 0) lastSlash = 0;
 
 		
-		Iterator<String> gen = results.Classes.get(stack.substring(lastSlash+1, splitpoint)).genType.keySet().iterator();
+		Iterator<String> gen = results.Classes.get(stack.substring(1, splitpoint)).genType.keySet().iterator();
 		LinkedHashMap<String, String> returnee = new LinkedHashMap<>();
 		StringBuilder build = new StringBuilder();
 		int brackets = 0;
@@ -9527,7 +9705,7 @@ public class CodeCreator {
 	}
 	
 	public void runClass(String filename) {
-		String cmd = "java -cp \"C:\\Users\\Nolan Murray\\git\\cro\\crodot\" "  + filename;
+		String cmd = "java -cp \"" + filename;
 		try {
 
 			Process comm = Runtime.getRuntime().exec(cmd);
@@ -9560,33 +9738,26 @@ public class CodeCreator {
 	}
 
 	public void Return(ASTNode tree) {
-		switch(returnType) {
-		case "V":
+		if (returnType.equals("V")) {
 			mv.visitInsn(Opcodes.RETURN);
-			break;
+			return;
+		}
+		evalE(tree);
+		castTopStackForVar(returnType, popStack(), tree.line);
+		switch(returnType) {
 		case "Z", "C", "S", "I":
-			evalE(tree);
-			curStack.pop();
 			mv.visitInsn(Opcodes.IRETURN);
 			break;
 		case "J":
-			evalE(tree);
-			curStack.pop();
 			mv.visitInsn(Opcodes.LRETURN);
 			break;
 		case "F":
-			evalE(tree);
-			curStack.pop();
 			mv.visitInsn(Opcodes.FRETURN);
 			break;
 		case "D":
-			evalE(tree);
-			curStack.pop();
 			mv.visitInsn(Opcodes.DRETURN);
 			break;
 		default:
-			evalE(tree);
-			curStack.pop();
 			mv.visitInsn(Opcodes.ARETURN);
 			break;
 		}

@@ -1,5 +1,6 @@
 package crodot;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Queue;
 
@@ -7,13 +8,15 @@ import crodotStates.TokenState;
 
 public class ErrorThrower {
 	String sourceFile;
+	String outputLoc;
 	Queue<Integer> lineNum;
 	LinkedList<String> fileContents;
 	
-	ErrorThrower(Queue<Integer> lineNum, LinkedList<String> fileContents, String sourceFile) {
+	ErrorThrower(Queue<Integer> lineNum, LinkedList<String> fileContents, String sourceFile, String outputLoc) {
 		this.lineNum = lineNum;
 		this.fileContents = fileContents;
 		this.sourceFile = sourceFile;
+		this.outputLoc = outputLoc;
 	}
 	
 	
@@ -101,5 +104,20 @@ public class ErrorThrower {
 		System.err.println(fileContents.get(lineNumber));
 		System.err.println("Error at line " + lineNumber + " in: " + sourceFile);
 		System.exit(-1);
+	}
+
+
+
+	public void UnknownConstructorException(int lineNumber, String name, ArrayList<ArrayList<String>> stacks) {
+		System.err.print("UnknownConstructorException");
+		System.err.print(": \"" + name + "\" does not have a constructor for arguements \"");
+		for (ArrayList<String> stack : stacks) {
+			System.err.print(stacks.get(0) + " ");
+		}
+		System.err.println("\"");
+		System.err.println(fileContents.get(lineNumber));
+		System.err.println("Error at line " + lineNumber + " in: " + sourceFile);
+		System.exit(-1);
+		
 	}
 }

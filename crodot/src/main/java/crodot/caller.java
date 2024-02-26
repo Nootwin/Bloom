@@ -38,19 +38,20 @@ public class caller {
 	static void printresults(AnaResults r) {
 		for (Map.Entry<String, ClassInfo> Class: r.Classes.entrySet()) {
 			for (Map.Entry<String, MethodInfo> Method: Class.getValue().methods.entrySet()) {
-				System.out.println("Class: " + Class.getValue().name + " Key: " + Class.getKey() + " Method: " + Method.getValue().name + " Key: " + Method.getKey() + " RETURN: " + Method.getValue().returnType + " First: " + Method.getValue().args.toString());
+				System.out.println("Class: " + Class.getKey() + " Method: " + Method.getValue().name + " Key: " + Method.getKey() + " RETURN: " + Method.getValue().returnType + " First: " + Method.getValue().args.toString());
 			}
 			for (Map.Entry<String, FieldInfo> Field: Class.getValue().fields.entrySet()) {
-				System.out.println("Class: " + Class.getValue().name + " Key: " + Class.getKey() + " Field: " + Field.getValue().name + " Key: " + Field.getKey() + " Type: " + Field.getValue().type);
+				System.out.println("Class: " + Class.getKey() + " Field: " + Field.getValue().name + " Key: " + Field.getKey() + " Type: " + Field.getValue().type);
 			}
 		}
 	}
 	static void printhelpfulresults(AnaResults r) {
 		Set<Entry<String, String>> types;
 		for (Map.Entry<String, ClassInfo> Class: r.Classes.entrySet()) {
-			if (!Class.getValue().name.startsWith("java/lang")) {
+			//cant have different return types with same args
+			if (Class.getKey().equals("java/lang/StringBuilder") || !Class.getKey().startsWith("java/lang")) {
 				for (Map.Entry<String, MethodInfo> Method: Class.getValue().methods.entrySet()) {
-					System.out.print("Class: " + Class.getValue().name + " Key: " + Class.getKey() + " Method: " + Method.getValue().name + " Key: " + Method.getKey() + " RETURN: " + Method.getValue().returnType + " First: ");
+					System.out.print("Class: " + Class.getKey() + " Method: " + Method.getValue().name + " Key: " + Method.getKey() + " RETURN: " + Method.getValue().returnType + " First: ");
 					System.out.print("[");
 					for (int i = 0; i < Method.getValue().args.size(); i++) {
 						System.out.print(Method.getValue().args.get(i).toString());
@@ -59,12 +60,12 @@ public class caller {
 					System.out.println("]");
 				}
 				for (Map.Entry<String, FieldInfo> Field: Class.getValue().fields.entrySet()) {
-					System.out.println("Class: " + Class.getValue().name + " Key: " + Class.getKey() + " Field: " + Field.getValue().name + " Key: " + Field.getKey() + " Type: " + Field.getValue().type);
+					System.out.println("Class: " + Class.getKey() + " Field: " + Field.getValue().name + " Key: " + Field.getKey() + " Type: " + Field.getValue().type);
 				}
 				
 				if (Class.getValue().genType != null) {
 					types = Class.getValue().Generics();
-					System.out.print(Class.getValue().name);
+					System.out.print(Class.getKey());
 					for (Entry<String, String> entry : types) {
 						System.out.print("   " + entry.getKey());
 						System.out.print(" " + entry.getValue());
@@ -112,6 +113,8 @@ public class caller {
 		case TokenState.RIGHTBRACE: return  "RIGHTBRACE";
 		case TokenState.LEFTCURLY: return  "LEFTCURLY";
 		case TokenState.RIGHTCURLY: return  "RIGHTCURLY";
+		case TokenState.LEFTCAST: return  "LEFTCAST";
+		case TokenState.RIGHTCAST: return  "RIGHTCAST";
 		case TokenState.SEPERATOR: return  "SEPERATOR";
 		case TokenState.INFERRED: return  "INFERRED";
 		case TokenState.CLASSMODIFIER: return  "CLASSMODIFIER";
@@ -142,17 +145,60 @@ public class caller {
 
 	}
 	public static void main(String[] args) {
-		singleFileCompileDebug("C:\\Users\\Nolan Murray\\git\\cro\\crodot\\bloomers\\main.bl", "main.bl");
-		
-
+		int ind;
+		if (args[0].equals("-d")) {
+			ind = args[1].lastIndexOf('\\');
+			if (ind == -1) {
+				singleFileCompileDebug(args[1], args[1], System.getProperty("user.dir"));
+			}
+			else {
+				singleFileCompileDebug(args[1], args[1].substring(ind+1), System.getProperty("user.dir"));
+			}
+		}
+		else {
+			ind = args[0].lastIndexOf('\\');
+			if (ind == -1) {
+				singleFileCompile(args[0], args[0], System.getProperty("user.dir"));
+			}
+			else {
+				singleFileCompile(args[0], args[0].substring(ind+1), System.getProperty("user.dir"));
+			}
+		}
 	}
 	
-	public static void singleFileCompileDebug(String fileLocation, String name) {
+	public static void singleFileCompile(String fileLocation, String name, String outputLoc) {
+		CrodotFileReader fileReader = new CrodotFileReader(fileLocation);
+		String file = fileReader.ReadFileToString();
+
+		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList(), name, outputLoc);
+
+		LexerAttempt3 lex2 = new LexerAttempt3(file, err);
+		ArrayList<Token> lexed = lex2.lex();
+
+		lex2 = null;
+
+		Parser newparse = new Parser(lexed, err);
+
+		lexed = null;
+
+		ASTNode parsed = newparse.parse();
+		newparse = null;
+
+		Analyser analy = new Analyser(parsed);
+
+		AnaResults results = analy.start();
+
+		Generator gen = new Generator(parsed, results, err, name);
+
+		gen.createSys(null);
+	}
+	
+	public static void singleFileCompileDebug(String fileLocation, String name, String outputLoc) {
 		CrodotFileReader fileReader = new CrodotFileReader(fileLocation);
 		String file = fileReader.ReadFileToString();
 		System.out.println(file);
 		
-		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList(), name);
+		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList(), name, outputLoc);
 		
 		LexerAttempt3 lex2 = new LexerAttempt3(file, err);
 		ArrayList<Token> lexed = lex2.lex();

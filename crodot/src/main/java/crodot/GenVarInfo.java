@@ -30,10 +30,17 @@ public class GenVarInfo extends VarInfo {
 		this.pos = pos;
 	}
 	
+	public GenVarInfo(String name, String type, String simpleType, int pos, LinkedHashMap<String, String> m) {
+		this.name = name;
+		this.type = type;
+		this.simpleType = simpleType;
+		this.pos = pos;
+		this.InferredTypes = m;
+	}
 	
 	
 	public GenVarInfo AddGenerics(ASTNode genNode, AnaResults results, String parentClass) {
-		ClassInfo info = results.Classes.get(simpleType);
+		ClassInfo info = results.Classes.get(type.substring(1, type.length()-1));
 		Iterator<String> keys = info.genType.keySet().iterator();
 		for (int i = 0; i < info.genType.size(); i++) {
 			sig.setLength(0);
@@ -70,8 +77,8 @@ public class GenVarInfo extends VarInfo {
 		}
 		else {
 			sig.append("L");
-			if (results.Classes.containsKey(className.value)) {
-				sig.append(results.Classes.get(className.value).name);
+			if (results.qNames.containsKey(className.value)) {
+				sig.append(results.qNames.get(className.value));
 			}
 			else {
 				sig.append(className.value);

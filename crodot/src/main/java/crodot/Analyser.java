@@ -35,7 +35,7 @@ public class Analyser {
 	}
 	
 	public AnaResults start() {
-		results.Classes.put("Main", new ClassInfo("Main"));
+		results.Classes.put("Main", new ClassInfo());
 		results.Classes.get("Main").methods.put("main", new MethodInfo("main", "V"));
 		results.Classes.get("Main").methods.get("main").args.add(new ArgsList<String>());
 		results.Classes.get("Main").methods.get("main").args.getLast().add("[Ljava/lang/String;");
@@ -63,7 +63,7 @@ public class Analyser {
 			name = "[";
 			
 			
-			results.Classes.put(name, new ClassInfo("["));
+			results.Classes.put(name, new ClassInfo());
 			ClassInfo info = results.Classes.get(name);
 			for (Method m : id.getMethods()) {
 				if (!info.methods.containsKey(m.getName())) {
@@ -364,8 +364,8 @@ public class Analyser {
 	}
 	
 	public String IfImport(String type) {
-		if (results.Classes.containsKey(type)) {
-			return results.Classes.get(type).name;
+		if (results.qNames.containsKey(type)) {
+			return results.qNames.get(type);
 		}
 		return type;
 	}
@@ -386,7 +386,7 @@ public class Analyser {
 			break;
 		case TokenState.DEFINITION:
 			curClass = tree.GetFirstNode().value;
-			results.Classes.put(curClass, new ClassInfo(curClass));
+			results.Classes.put(curClass, new ClassInfo());
 			if (accAlr) {
 				if (privacy == 0) {
 					switch(tree.value) {
@@ -668,6 +668,10 @@ public class Analyser {
 	private void Import(String classID) {
 		String nameHolder;
 		Class<?> id;
+		String name = classID.replace('.', '/');
+		if (results.Classes.containsKey(name)) {
+			return;
+		}
 		try {
 			id = Class.forName(classID);
 		} catch (ClassNotFoundException e1) {
@@ -675,13 +679,15 @@ public class Analyser {
 			id = fetcher.fetchNonJava(System.getProperty("user.dir") + "\\" + classID + ".class", classID);
 		}
 			ArgsList<String> args = new ArgsList<>();
-			String name;
 			
-			name = id.getSimpleName();
+			results.qNames.put(id.getSimpleName(), name);
+			
 			HashMap<String, String> genTypeMethod = null;
+			ClassInfo info;
 			
-			results.Classes.put(name, new ClassInfo(classID.replace('.', '/')));
-			ClassInfo info = results.Classes.get(name);
+			
+			results.Classes.put(name, info = new ClassInfo());
+			
 			for (TypeVariable<?> type : id.getTypeParameters()) {
 				if (!info.canGeneric()) {
 					info.willGeneric();
@@ -701,19 +707,6 @@ public class Analyser {
 					info.methods.put(m.getName(), new MethodInfo(m.getName()));
 					info.methods.get(m.getName()).AccessModifiers = Modifier.toString(m.getModifiers());
 				}
-				nameHolder = m.getGenericReturnType().getTypeName();
-				if (nameHolder.contains("<")) {
-					info.methods.get(m.getName()).returnType.add(strToByteGeneric(nameHolder, genTypeMethod, info.genType));
-				}
-				else if (genTypeMethod != null && genTypeMethod.containsKey(nameHolder.replace("[]", ""))) {
-					info.methods.get(m.getName()).returnType.add(strToByte(genTypeMethod.get(nameHolder.replace("[]", ""))));
-				}
-				else if (info.canGeneric() && info.genType.containsKey("T" + nameHolder.replace("[]", "") + ";")) {
-					info.methods.get(m.getName()).returnType.add("T" + moveBrackets(nameHolder) + ";");
-				}
-				else {
-					info.methods.get(m.getName()).returnType.add(strToBytePlus(nameHolder.replace('.', '/')));
-				}
 				
 				for (Parameter p : m.getParameters()) {
 					nameHolder = p.getParameterizedType().getTypeName();
@@ -732,7 +725,23 @@ public class Analyser {
 					}
 				}
 				
-				info.methods.get(m.getName()).args.add(args);
+				if (!info.methods.get(m.getName()).args.contains(args)) {
+					info.methods.get(m.getName()).args.add(args);
+					nameHolder = m.getGenericReturnType().getTypeName();
+					if (nameHolder.contains("<")) {
+						info.methods.get(m.getName()).returnType.add(strToByteGeneric(nameHolder, genTypeMethod, info.genType));
+					}
+					else if (genTypeMethod != null && genTypeMethod.containsKey(nameHolder.replace("[]", ""))) {
+						info.methods.get(m.getName()).returnType.add(strToByte(genTypeMethod.get(nameHolder.replace("[]", ""))));
+					}
+					else if (info.canGeneric() && info.genType.containsKey("T" + nameHolder.replace("[]", "") + ";")) {
+						info.methods.get(m.getName()).returnType.add("T" + moveBrackets(nameHolder) + ";");
+					}
+					else {
+						info.methods.get(m.getName()).returnType.add(strToBytePlus(nameHolder.replace('.', '/')));
+					}
+				}
+
 				args = new ArgsList<>();
 				genTypeMethod = null;
 			}
