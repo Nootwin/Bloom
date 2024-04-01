@@ -15,5 +15,9 @@ public class CrodotType extends CrodotCode {
 		mv.visitTypeInsn(opcode, type);
 	}
 	
+	public String toString() {
+		return "mv.visitTypeInsn(" + opcode + ", " + type + ")";
+	}
+	
 	
 }

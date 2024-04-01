@@ -16,7 +16,7 @@ public class CrodotVar extends CrodotCode {
 	}
 	
 	public String toString() {
-		return "VAR" + opcode;
+		return "VAR" + opcode + " " + varIndex;
 	}
 	
 	

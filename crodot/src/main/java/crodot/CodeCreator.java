@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
@@ -22,6 +23,7 @@ import org.objectweb.asm.Opcodes;
 
 import crodotInsn.CrodotIInc;
 import crodotInsn.CrodotInsn;
+import crodotInsn.CrodotInt;
 import crodotInsn.CrodotMethod;
 import crodotInsn.CrodotType;
 import crodotInsn.CrodotVar;
@@ -48,9 +50,10 @@ public class CodeCreator {
 	private ArrayList<Integer> getAllRangeStackPos;
 	private VariableManager vars;
 	LinkedHashMap<String, String> curGenType;
+	private Analyser analy;
 	
 	
-	CodeCreator(AnaResults results, ErrorThrower err, String sourceFile) {
+	CodeCreator(AnaResults results, ErrorThrower err, Analyser analy, String sourceFile) {
 		vars = new VariableManager();
 		labelList = new Stack<>();
 		curStack = new Stack<>();
@@ -61,6 +64,7 @@ public class CodeCreator {
 		this.results = results;
 		this.err = err;
 		this.sourceFile = sourceFile;
+		this.analy = analy;
 		
 		MainClass = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
 		MainClass.visit(Opcodes.V19, Opcodes.ACC_PUBLIC, "Main", null, "java/lang/Object", null);
@@ -85,10 +89,12 @@ public class CodeCreator {
 	
 	public LinkedHashMap<String, String> createGenType(ASTNode gen, String name) {
 		String type = IfImport(name);
+		System.out.println(name);
 		LinkedHashMap<String, String> map = new LinkedHashMap<>();;
 		ClassInfo info = results.Classes.get(type);
 		Iterator<String> keys = info.genType.keySet().iterator();
 		StringBuilder sig = new StringBuilder();
+		//why getting called
 		for (int i = 0; i < info.genType.size(); i++) {
 			map.put(keys.next(), nodeToString(gen.GetNode(i), info));
 		}
@@ -141,6 +147,7 @@ public class CodeCreator {
 			err.UnknownMethodException(LineNum, Methodname, Classname);
 		}
 		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
+		//System.out.println("INVOKE" + stacks);
 		if ((!Objects.isNull(info))) {
 			for (int i = 0; i < info.args.size(); i++) {
 				if (info.args.get(i).size() == stacks.size()) {
@@ -148,9 +155,13 @@ public class CodeCreator {
 					tempPrio[0] = i;
 					flag = true;
 					for (int j = 0; j < stacks.size(); j++) {
+						System.out.println("TYPETYPE" + stacks.get(j).toString());
 						if ((indexOf = stacks.get(j).indexOf(info.args.get(i).get(j))) != -1) {
 						
 							tempPrio[j+1] = indexOf;
+						}
+						else if (stacks.get(j).get(0).equals("null") && info.args.get(i).get(j).length() > 1) {
+							tempPrio[j+1] = 0;
 						}
 						else {
 							flag = false;
@@ -178,11 +189,21 @@ public class CodeCreator {
 			}
 			if (priority != null) {
 				addCastings(info.args.get(priority[0]), stacks);
+				String ret;
 				if (results.Classes.get(curName).canGeneric()) {
-					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(curName).genType), replaceAll(info.returnType.get(priority[0]), results.Classes.get(curName).genType), info.AccessModifiers};
+					ret = replaceReturn(info.returnType.get(priority[0]), results.Classes.get(curName).genType);
+					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
+						analy.Import(ImportFormat(ret));
+					}
+					
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(curName).genType), ret, info.AccessModifiers};
 				}
 				else {
-					return new String[] {info.args.get(priority[0]).toArgs(), info.returnType.get(priority[0]), info.AccessModifiers};
+					ret = info.returnType.get(priority[0]);
+					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
+						analy.Import(ImportFormat(ret));
+					}
+					return new String[] {info.args.get(priority[0]).toArgs(), ret, info.AccessModifiers};
 				}
 			}
 				
@@ -218,36 +239,40 @@ public class CodeCreator {
 
 		for (int i = 0; i < argsList.size(); i++) {
 			if (stacks.get(i).get(0).length() < 2 && argsList.get(i).length() > 1 && stacks.get(i).get(0) != argsList.get(i) ) {
-				switch(stacks.get(i).get(0)) {
-				case "Z":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false), getAllRangeStackPos.get(i));
-					break;
-				case "B":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false), getAllRangeStackPos.get(i));
-					break;
-				case "S":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false), getAllRangeStackPos.get(i));
-					break;
-				case "I":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false), getAllRangeStackPos.get(i));
-					break;
-				case "C":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false), getAllRangeStackPos.get(i));
-					break;
-				case "F":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false), getAllRangeStackPos.get(i));
-					break;
-				case "D":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false), getAllRangeStackPos.get(i));
-					break;
-				case "J":
-					mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false), getAllRangeStackPos.get(i));
-					break;
-				}
+				castingsPrimitive(stacks.get(i).get(0), getAllRangeStackPos.get(i));
 
 			}
 		}
 		
+	}
+	
+	private void castingsPrimitive(String type, int posInQueue) {
+		switch(type) {
+		case "Z":
+			mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false), posInQueue);
+			break;
+		case "B":
+			mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false), posInQueue);
+			break;
+		case "S":
+			mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false), posInQueue);
+			break;
+		case "I":
+			mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false), posInQueue);
+			break;
+		case "C":
+			mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false), posInQueue);
+			break;
+		case "F":
+			mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false), posInQueue);
+			break;
+		case "D":
+			mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false), posInQueue);
+			break;
+		case "J":
+			mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false), posInQueue);
+			break;
+		}
 	}
 
 	
@@ -273,7 +298,6 @@ public class CodeCreator {
 					for (int j = 0; j < stacks.size(); j++) {
 						if (info.args.get(i).get(j).startsWith("T")) {
 							tempParam = info.args.get(i).get(j);
-							
 							if (results.Classes.get(Classname).canGeneric() && (indexOf = stacks.get(j).indexOf(results.Classes.get(Classname).genType.get(tempParam))) == -1) {
 								flag = false;
 								break;
@@ -322,12 +346,21 @@ public class CodeCreator {
 				}
 			}
 			if (priority != null) {
+				String ret;
 				addCastings(info.args.get(priority[0]), stacks);
 				if (results.Classes.get(curName).canGeneric()) {
-					return new String[] {replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(curName).genType) , results.Classes.get(Classname).genType), replaceReturn(replaceReturn(info.returnType.get(priority[0]), results.Classes.get(curName).genType), results.Classes.get(Classname).genType), info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0])), };
+					ret = replaceReturn(replaceReturn(info.returnType.get(priority[0]), results.Classes.get(curName).genType), results.Classes.get(Classname).genType);
+					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
+						analy.Import(ImportFormat(ret));
+					}
+					return new String[] {replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(curName).genType) , results.Classes.get(Classname).genType), ret, info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0])), };
 				}
 				else {
-					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(Classname).genType), replaceReturn(info.returnType.get(priority[0]), results.Classes.get(Classname).genType), info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0]))};
+					ret = replaceReturn(info.returnType.get(priority[0]), results.Classes.get(Classname).genType);
+					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
+						analy.Import(ImportFormat(ret));
+					}
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(Classname).genType), ret, info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0]))};
 				}
 			}
 				
@@ -360,76 +393,96 @@ public class CodeCreator {
 		return results.Classes.get(curName);
 	}
 	
+	private ArrayList<String> getAllPossibleTypes(String str) {
+		String arrayPrefix;
+		String baseType;
+		if (str.startsWith("[")) {
+			int lastsqar = str.lastIndexOf('[');
+			arrayPrefix = str.substring(0, lastsqar);
+			baseType = str.substring(lastsqar);
+		}
+		else {
+			arrayPrefix = "";
+			baseType = str;
+		}
+		ArrayList<String> list = new ArrayList<>();
+		list.add(str);
+		switch(baseType) {
+		case "Z":
+			list.add(arrayPrefix + "Ljava/lang/Boolean;");
+			list.add(arrayPrefix + "Ljava/lang/Object;");
+			break;
+		case "C":
+			list.add(arrayPrefix + "I");
+			list.add(arrayPrefix + "Ljava/lang/Character;");
+			list.add(arrayPrefix + "Ljava/lang/Object;");
+			break;
+		case "B":
+			list.add(arrayPrefix + "I");
+			list.add(arrayPrefix + "Ljava/lang/Byte;");
+			list.add(arrayPrefix + "Ljava/lang/Object;");
+			break;
+		case "S":
+			list.add(arrayPrefix + "I");
+			list.add(arrayPrefix + "Ljava/lang/Short;");
+			list.add(arrayPrefix + "Ljava/lang/Object;");
+			break;
+		case "I":
+			list.add(arrayPrefix + "Ljava/lang/Integer;");
+			list.add(arrayPrefix + "Ljava/lang/Object;");
+			break;
+		case "J":
+			list.add(arrayPrefix + "Ljava/lang/Long;");
+			list.add(arrayPrefix + "Ljava/lang/Object;");
+			break;
+		case "F":
+			list.add(arrayPrefix + "Ljava/lang/Float;");
+			list.add(arrayPrefix + "Ljava/lang/Object;");
+			break;
+		case "D":
+			list.add(arrayPrefix + "Ljava/lang/Double;");
+			list.add(arrayPrefix + "Ljava/lang/Object;");
+			break;
+		case "Ljava/lang/String;", "null":
+			list.add(arrayPrefix + "Ljava/lang/Object;");
+			break;
+		case "Ljava/lang/Object;":
+			break;
+		default:
+			if (results.Classes.get(curName).canGeneric() && results.Classes.get(curName).genType.containsKey(str)) {
+				list.add(arrayPrefix + "Ljava/lang/Object;");
+				break;
+			}
+			try {
+				Class <?> C = Class.forName(ImportFormat(str));
+				while ((C = C.getSuperclass()) != null) {
+					list.add(arrayPrefix + "L" + C.getName().replace(".", "/") + ";");
+				}
+				break;
+			}
+			catch (ClassNotFoundException e){
+				list.add("Ljava/lang/Object;");
+				e.printStackTrace();
+			}
+			
+		}
+		int x = arrayPrefix.length();
+		for (int i = 0; i < x; i++) {
+			arrayPrefix = arrayPrefix.substring(1);
+			list.add(arrayPrefix + "Ljava/lang/Object;");
+		}
+		
+		return list;
+	}
+	
 	private ArrayList<ArrayList<String>> getAllRangeStack(int size){
 		ArrayList<ArrayList<String>> returnList = new ArrayList<>();
 		getAllRangeStackPos = new ArrayList<>();
-		ArrayList<String> list;
 		StackInfo str;
 		for (int i = 0; i < size; i++) {
 			str = curStack.pop();
-			list = new ArrayList<>();
-			list.add(str.type);
 			getAllRangeStackPos.add(str.posInQueue);
-			switch(str.type) {
-			case "Z":
-				list.add("Ljava/lang/Boolean;");
-				list.add("Ljava/lang/Object;");
-				break;
-			case "C":
-				list.add("I");
-				list.add("Ljava/lang/Character;");
-				list.add("Ljava/lang/Object;");
-				break;
-			case "B":
-				list.add("I");
-				list.add("Ljava/lang/Byte;");
-				list.add("Ljava/lang/Object;");
-				break;
-			case "S":
-				list.add("I");
-				list.add("Ljava/lang/Short;");
-				list.add("Ljava/lang/Object;");
-				break;
-			case "I":
-				list.add("Ljava/lang/Integer;");
-				list.add("Ljava/lang/Object;");
-				break;
-			case "J":
-				list.add("Ljava/lang/Long;");
-				list.add("Ljava/lang/Object;");
-				break;
-			case "F":
-				list.add("Ljava/lang/Float;");
-				list.add("Ljava/lang/Object;");
-				break;
-			case "D":
-				list.add("Ljava/lang/Double;");
-				list.add("Ljava/lang/Object;");
-				break;
-			case "Ljava/lang/String;":
-				list.add("Ljava/lang/Object;");
-				break;
-			case "Ljava/lang/Object;":
-				break;
-			default:
-				if (str.type.contains("[") || results.Classes.get(curName).canGeneric() && results.Classes.get(curName).genType.containsKey(str.type)) {
-					list.add("Ljava/lang/Object;");
-					break;
-				}
-				try {
-					Class <?> C = Class.forName(ImportFormat(str.type));
-					while ((C = C.getSuperclass()) != null) {
-						list.add("L" + C.getName().replace(".", "/") + ";");
-					}
-					break;
-				}
-				catch (ClassNotFoundException e){
-					list.add("Ljava/lang/Object;");
-					e.printStackTrace();
-				}
-				
-			}
-			returnList.add(list);
+			returnList.add(getAllPossibleTypes(str.type));
 		}
 		return returnList;
 	}
@@ -622,7 +675,6 @@ public class CodeCreator {
 		
 		if (!results.Classes.get(curName).methods.get(methodName).AccessModifiers.contains("static")) {
 			vars.add("this", new VarInfo("this" , curName, 0));
-			
 		}
 		ArgsList<String> args = fromNodetoArg(tree);
 		if (methodName.equals(curName)) {
@@ -632,6 +684,7 @@ public class CodeCreator {
 			this.returnType = "V";
 		}
 		else {
+			System.out.println("RIRIRI" + args.toArgs());
 			mv = new CrodotMethodVisitor(cw.visitMethod(results.Classes.get(curName).methods.get(methodName).AccessOpcode, methodName,  args.toArgs() + returnType, signature, null));
 		}
 		
@@ -770,12 +823,11 @@ public class CodeCreator {
 			OtherClass = cw;
 			cw = MainClass;
 			curName = "Main";
-			returnType = "V";
-			
 		
 			if (method) {
 				mv =  MainMethod;
 				vars.setMain();
+				returnType = "V";
 			}
 		}
 		if (If) {
@@ -875,8 +927,10 @@ public class CodeCreator {
 		ArgsList<String> build = new ArgsList<>();
 		String temp;
 		for (int i = 1; i < parent.GetNodeSize()-1; i++) {
-			
-			if (results.Classes.get(curName).canGeneric() && results.Classes.get(curName).genType.containsKey("T" + parent.GetNode(i).value + ";")) {
+			if (parent.GetNode(i).type == TokenState.GENERIC) {
+				break;
+			}
+			else if (results.Classes.get(curName).canGeneric() && results.Classes.get(curName).genType.containsKey("T" + parent.GetNode(i).value + ";")) {
 				build.add(temp = results.Classes.get(curName).genType.get("T" + parent.GetNode(i).value + ";"));
 			}
 			else {
@@ -908,6 +962,11 @@ public class CodeCreator {
 	}
 	public void newField(String name, String type, int Access, ASTNode node) {
 		cw.visitField(Access, name, strToByte(type), signatureWriterField(node), null).visitEnd();
+		
+	}
+	public void newFieldUnkType(String name, int Access, ASTNode node) {
+		err.UnknownFieldTypeException(node.line, name, curName);
+		
 		
 	}
 	public void uninitnewVar(String name, String type, int line) {
@@ -982,16 +1041,27 @@ public class CodeCreator {
 			vars.Inc();
 		}
 	}
+	public void CastElementAnywhere(StackInfo info, String wantedType) {
+		
+	}
 	
 	public String peekStack() {
 		return curStack.peek().type;
+	}
+	
+	public String removeGenerics(String type) {
+		if (type.contains("<")) {
+			return type.substring(0, type.indexOf('<')) + ";";
+		}
+		return type;
 	}
 	
 	public String loadVar(String name, ASTNode bode) {
 		String add;
 		VarInfo var;
 		ASTNode node = bode;
-		if (vars.contains(name) && (node.prev.type != TokenState.DOT || (node.prev.prev.type != TokenState.DOT && node == node.prev.GetFirstNode()))) {
+		//might need work
+		if (vars.contains(name)) {
 			if (node.prev.type == TokenState.INCREMENT || node.prev.type == TokenState.DECREMENT) { 
 				add = "VAR";
 			}
@@ -1046,6 +1116,7 @@ public class CodeCreator {
 			ClassInfo info;
 			String prev;
 			if (node.prev.type == TokenState.DOT) {
+				System.out.println(name);
 				prev = stripToImport(curStack.pop().type);
 				if (prev.startsWith("[")) {
 					mv.visitInsn(Opcodes.ARRAYLENGTH);
@@ -2706,6 +2777,18 @@ public class CodeCreator {
 	
 	public String evalE(ASTNode node) {
 		switch(node.type) {
+		case TokenState.NULLVALUE:
+			mv.visitInsn(Opcodes.ACONST_NULL);
+			return curStack.push(new StackInfo("null", mv.size())).type;
+		case TokenState.IS:
+			System.out.println("IS" + node.GetFirstNode());
+			String val = evalE(node.GetFirstNode());
+			curStack.pop();
+			return Is(val, node.GetNode(1).value);
+		case TokenState.SEPERATOR:
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
+			return null;
 		case TokenState.CAST:
 			return Cast(node);
 		case TokenState.EQUIVALENCY:
@@ -2742,7 +2825,12 @@ public class CodeCreator {
 			}
 			return stackTop();
 		case TokenState.GENFUN:
-			curStack.push(new StackInfo(constWithGen(node, null), mv.size()));
+			if (curGenType != null && node.Grab(TokenState.GENERIC).GetNodeSize() < 1) {
+				curStack.push(new StackInfo(constWithGen(node, curGenType), mv.size()));
+			}
+			else {
+				curStack.push(new StackInfo(constWithGen(node,createGenType(node.Grab(TokenState.GENERIC), node.value)), mv.size()));
+			}
 			return stackTop();
 		case TokenState.IDENTIFIER:
 			curStack.push(new StackInfo(loadVar(node.value, node), mv.size()));
@@ -2769,7 +2857,7 @@ public class CodeCreator {
 			}
 			return curStack.push(new StackInfo(LoadArrIndex(loadVar(node.value, node), node, 0), mv.size())).type;
 		case TokenState.RIGHTBRACE:
-			return initArray(node);
+			return curStack.push(new StackInfo(initArray(node, null), mv.size())).type;
 		case TokenState.CHAR:
 			mv.visitLdcInsn(node.value.charAt(0));
 			curStack.push(new StackInfo("C", mv.size()));
@@ -4566,6 +4654,15 @@ public class CodeCreator {
 	public String evalE(ASTNode node, String TypeExpected) {
 
 		switch(node.type) {
+		case TokenState.IS:
+			System.out.println("IS" + node.GetFirstNode());
+			String val = evalE(node.GetFirstNode());
+			curStack.pop();
+			return Is(val, node.GetNode(1).value);
+		case TokenState.SEPERATOR:
+			evalE(node.GetFirstNode());
+			evalE(node.GetNode(1));
+			return null;
 		case TokenState.CAST:
 			return Cast(node);
 		case TokenState.EQUIVALENCY:
@@ -4599,11 +4696,12 @@ public class CodeCreator {
 			return EIncrement(node, -1);
 		case TokenState.GENFUN:
 			//err
-			if (curGenType == null) {
-				curStack.push(new StackInfo(constWithGen(node, createGenType(node.Grab(TokenState.GENERIC), node.value)), mv.size()));
-			}
-			else if (node.Grab(TokenState.GENERIC).GetNodeSize() < 1) {
+			System.out.println("GENFUN");
+			if (curGenType != null && node.Grab(TokenState.GENERIC).GetNodeSize() < 1) {
 				curStack.push(new StackInfo(constWithGen(node, curGenType), mv.size()));
+			}
+			else {
+				curStack.push(new StackInfo(constWithGen(node,createGenType(node.Grab(TokenState.GENERIC), node.value)), mv.size()));
 			}
 			
 			return stackTop();
@@ -4642,7 +4740,15 @@ public class CodeCreator {
 			mv.visitInsn(Opcodes.IAND);
 			return "Z";
 		case TokenState.RIGHTBRACE:
-			return initArray(node);
+			
+			if (TypeExpected.startsWith("[")) {
+				return curStack.push(new StackInfo(initArray(node, TypeExpected.substring(1)), mv.size())).type;
+			}
+			else {
+				err.IncompatibleTypeException(node.line, TypeExpected, "Array");
+				return null;
+			}
+			
 		case TokenState.CHAR:
 			mv.visitLdcInsn(node.value.charAt(0));
 			curStack.push(new StackInfo("C", mv.size()));
@@ -8627,6 +8733,39 @@ public class CodeCreator {
 		
 	}
 	
+	private String Is(String valType, String type) {
+		String sureType;
+		if (type.equals("str")) {
+			sureType = "java/lang/String";
+		}
+		else {
+			sureType = IfImport(type);
+		}
+		switch (valType) {
+		case "B", "S", "I", "Z", "C", "F":
+			mv.visitInsn(Opcodes.POP);
+			if (valType.equals(strToByte(type))) {
+				mv.visitLdcInsn(1);
+			}
+			else {
+				mv.visitLdcInsn(0);
+			}
+			return "Z";
+		case "D", "J":
+			mv.visitInsn(Opcodes.POP2);
+			if (valType.equals(strToByte(type))) {
+				mv.visitLdcInsn(1);
+			}
+			else {
+				mv.visitLdcInsn(0);
+			}
+			return "Z";	
+		}
+
+		mv.visitTypeInsn(Opcodes.INSTANCEOF, sureType);
+		return "Z";
+	}
+	
 	private String Rem(StackInfo s2, StackInfo s1, int line) {
 		String type = castBothTG(s1, s2);
 		switch(type) {
@@ -8864,6 +9003,7 @@ public class CodeCreator {
 	
 	private String constWithGen(ASTNode tree, LinkedHashMap<String, String> genTypeInfo) {
 		String type = IfImport(tree.value);
+		System.out.println(type);
 		int[] priority = null;
 		int[] tempPrio;
 		boolean flag;
@@ -8962,13 +9102,22 @@ public class CodeCreator {
 	
 
 
-	private String typedGeneric(ASTNode gen) {
-
+	private String typedGeneric(ASTNode gen, LinkedHashMap<String, String> genTypeInfo) {
+		
 		StringBuilder b = new StringBuilder("<");
 		for (int i = 0; i < gen.GetNodeSize(); i++) {
 			switch(gen.GetNode(i).type) {
 			case TokenState.CLASSNAME:
-				b.append("T" + IfImport(gen.GetNode(i).value) + ";");
+				String name;
+				if (genTypeInfo.containsKey(gen.GetNode(i).value)) {
+					b.append(name = genTypeInfo.get("T" + gen.GetNode(i).value + ";"));
+				} else {
+					b.append(name = strToByte(gen.GetNode(i).value));
+				}
+				if (gen.GetNode(i).GetNodeSize() > 0) {
+					System.out.println(stripToImport(name));
+					b.insert(b.length()-1, typedGeneric(gen.GetNode(i).GetNode(0), results.Classes.get(stripToImport(name)).genType));
+				}
 				break;
 			case TokenState.INFERRED:
 				b.append('*');
@@ -8983,7 +9132,7 @@ public class CodeCreator {
 				b.append(strToByte(gen.GetNode(i).GetNode(1).value));
 				break;
 			case TokenState.GENERIC:
-				b.append(typedGeneric(gen.GetNode(i)));
+				b.append(typedGeneric(gen.GetNode(i), genTypeInfo)); //hjelp
 				break;
 			}
 			
@@ -8991,19 +9140,25 @@ public class CodeCreator {
 		return b.append(">").toString();
 	}
 	private String signatureWriterMethod(ASTNode methodCall) {
-		ASTNode curGen;
+		ASTNode curGen = null;
 		StringBuilder b = new StringBuilder("(");
 		int i = 1;
 		boolean flag = false;
 		String resultString;
 		while (methodCall.GetNodeSize() > i && (curGen = methodCall.GetNode(i)).type != TokenState.START) {
+			System.out.println("GENGEN" + curGen.value);
+			if (curGen.type == TokenState.GENERIC) {
+				System.out.println("GENGEBEN");
+				break;
+			}
 			b.append(resultString = strToByte(curGen.value));
+
 			if (resultString.startsWith("T")) {
 				flag = true;
 			}
 			if ((curGen = curGen.Grab(TokenState.GENERIC)) != null) {
 				b.deleteCharAt(b.length()-1);
-				b.append(typedGeneric(curGen));
+				b.append(typedGeneric(curGen, results.Classes.get(resultString).genType));
 				b.append(";");
 				flag = true;
 			}
@@ -9012,11 +9167,15 @@ public class CodeCreator {
 		b.append(")");
 		
 		
-		if (flag) {
-			b.append(strToByte(methodCall.value));
+		if (flag || curGen.type == TokenState.GENERIC) {
+			b.append(resultString = strToByte(methodCall.value));
+
 			if ((curGen = methodCall.Grab(TokenState.GENERIC)) != null) {
-				b.append(typedGeneric(curGen));
+				b.setLength(b.length()-1);
+				b.append(typedGeneric(curGen, results.Classes.get(IfImport(methodCall.value)).genType));
+				b.append(";");
 			}
+			System.out.println(b.toString());
 			return b.toString();
 		}
 		return null;
@@ -9201,82 +9360,228 @@ public class CodeCreator {
 			return type.replaceFirst("\\[", "");
 		}
 	}
-
-	private String initArray(ASTNode node) {
-		ASTNode temp = node;
-		int slack = -2;
-		String valType;
-		while (temp.type != TokenState.DECLARATION && temp.type != TokenState.DESCRIPTION)  {
-			temp = temp.prev;
-			slack += 2;
-		}
+	
+	private String initArray(ASTNode node, String type) { //type is the type of the elements in the array, strToByte format
+		String retType;
 		int enCapCode;
 		mv.visitLdcInsn(node.GetNodeSize());
-		switch(temp.value.substring(0, temp.value.length()-slack)) {
-		case "bool[]":
-			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
-			enCapCode = Opcodes.IASTORE;
-			valType = "Z";
-			break;
-		case "byte[]":
-			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BYTE);
-			enCapCode = Opcodes.BASTORE;
-			valType = "B";
-			break;
-		case "shrt[]":
-			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_SHORT);
-			enCapCode = Opcodes.SASTORE;
-			valType = "S";
-			break;
-		case "int[]":
-			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_INT);
-			enCapCode = Opcodes.IASTORE;
-			valType = "I";
-			break;
-		case "char[]":
-			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_CHAR);
-			enCapCode = Opcodes.CASTORE;
-			valType = "C";
-			break;
-		case "long[]":
-			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
-			enCapCode = Opcodes.LASTORE;
-			valType = "J";
-			break;
-		case "doub[]":
-			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
-			enCapCode = Opcodes.DASTORE;
-			valType = "D";
-			break;
-		case "flt[]":
-			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_FLOAT);
-			enCapCode = Opcodes.FASTORE;
-			valType = "F";
-			break;
-		default:
-			valType = strToByte(temp.value.substring(0, temp.value.length()-slack-2));
-			if (valType.contains("[")) {
-				mv.visitTypeInsn(Opcodes.ANEWARRAY, valType);
+		if (!(type == null)) {
+			
+			
+			retType = "[" + type;
+			switch(type) {
+			case "Z":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
+				enCapCode = Opcodes.IASTORE;
+				break;
+			case "B":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BYTE);
+				enCapCode = Opcodes.BASTORE;
+				break;
+			case "S":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_SHORT);
+				enCapCode = Opcodes.SASTORE;
+				break;
+			case "I":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_INT);
+				enCapCode = Opcodes.IASTORE;
+				break;
+			case "C":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_CHAR);
+				enCapCode = Opcodes.CASTORE;
+				break;
+			case "J":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
+				enCapCode = Opcodes.LASTORE;
+				break;
+			case "D":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
+				enCapCode = Opcodes.DASTORE;
+				break;
+			case "F":
+				mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_FLOAT);
+				enCapCode = Opcodes.FASTORE;
+				break;
+			default:
+				System.out.println("hello?" + type);
+				mv.visitTypeInsn(Opcodes.ANEWARRAY, type);
+				enCapCode = Opcodes.AASTORE;
+				break;
+			}
+			
+			for (int i = 0; i < node.GetNodeSize(); i++) {
+				mv.visitInsn(Opcodes.DUP);
+				mv.visitLdcInsn(i);
+				evalE(node.GetNode(i));
+				castTopStackForVar(type, popStack(), node.line);
+				mv.visitInsn(enCapCode);
+			}
+		}
+		else {
+			LinkedList<String> posType;
+			ArrayList<String> nextType;
+			LinkedList<StackInfo> elements = new LinkedList<>();
+			
+			
+			mv.add(null);
+			int arrayDec = mv.size()-1;
+			if (node.GetNodeSize() > 0) {
+				mv.visitInsn(Opcodes.DUP);
+				mv.visitLdcInsn(0);
+				evalE(node.GetFirstNode());
+				elements.add(curStack.pop());
+				posType = new LinkedList<String>(getAllPossibleTypes(elements.getFirst().type));
+				for (int i = 1; i < node.GetNodeSize(); i++) {
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitLdcInsn(i);
+					evalE(node.GetNode(i));
+					elements.add(curStack.pop());
+					nextType = getAllPossibleTypes(elements.getLast().type);
+					while (!nextType.contains(posType.getFirst())) {
+						posType.removeFirst();
+						if (posType.isEmpty()) {
+							err.AmbiguousAutoArrayTypeException(node.value, node.line);
+						}
+					}
+				}
+				retType = "[" + posType.getFirst();
+				switch(posType.getFirst()) {
+				case "Z":
+					mv.set(new CrodotInt(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN), arrayDec);
+					enCapCode = Opcodes.IASTORE;
+					break;
+				case "B":
+					mv.set(new CrodotInt(Opcodes.NEWARRAY, Opcodes.T_BYTE), arrayDec);
+					enCapCode = Opcodes.BASTORE;
+					break;
+				case "S":
+					mv.set(new CrodotInt(Opcodes.NEWARRAY, Opcodes.T_SHORT), arrayDec);
+					enCapCode = Opcodes.SASTORE;
+					break;
+				case "I":
+					mv.set(new CrodotInt(Opcodes.NEWARRAY, Opcodes.T_INT), arrayDec);
+					enCapCode = Opcodes.IASTORE;
+					break;
+				case "J":
+					mv.set(new CrodotInt(Opcodes.NEWARRAY, Opcodes.T_LONG), arrayDec);
+					enCapCode = Opcodes.LASTORE;
+					break;
+				case "F":
+					mv.set(new CrodotInt(Opcodes.NEWARRAY, Opcodes.T_FLOAT), arrayDec);
+					enCapCode = Opcodes.FASTORE;
+					break;
+				case "D":
+					mv.set(new CrodotInt(Opcodes.NEWARRAY, Opcodes.T_DOUBLE), arrayDec);
+					enCapCode = Opcodes.DASTORE;
+					break;
+				default:
+					if (posType.getFirst().startsWith("[")) {
+						mv.set(new CrodotType(Opcodes.ANEWARRAY, posType.getFirst()), arrayDec);
+					}
+					else {
+						mv.set(new CrodotType(Opcodes.ANEWARRAY, stripToImport(posType.getFirst())), arrayDec);
+					}
+					enCapCode = Opcodes.AASTORE;
+					break;
+				}
+				StackInfo curEle;
+				while (!elements.isEmpty()) {
+					curEle = elements.removeLast();
+					mv.insert(new CrodotInsn(enCapCode), curEle.posInQueue);
+					if (curEle.type.length() < 2 && !curEle.type.equals(posType.getFirst())) {
+						castingsPrimitive(curEle.type, curEle.posInQueue);
+					}
+					
+				}
+				
+				
 			}
 			else {
-				mv.visitTypeInsn(Opcodes.ANEWARRAY, valType.substring(1, valType.length()-1));
+				retType = "[Ljava/lang/Object;";
+				mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+				
 			}
 			
-			enCapCode = Opcodes.AASTORE;
 			
-			break;
 		}
-		for (int i = 0; i < node.GetNodeSize(); i++) {
-			mv.visitInsn(Opcodes.DUP);
-			mv.visitLdcInsn(i);
-			evalE(node.GetNode(i));
-			castTopStackForVar(valType, popStack(), node.line);
-			mv.visitInsn(enCapCode);
-		}
-		
-		return (strToByte(temp.value.substring(0, temp.value.length()-slack)));
-		
+		return retType;
 	}
+
+//	private String initArray(ASTNode node) {
+//		ASTNode temp = node;
+//		int slack = -2;
+//		String valType;
+//		while (temp.type != TokenState.DECLARATION && temp.type != TokenState.DESCRIPTION)  {
+//			temp = temp.prev;
+//			slack += 2;
+//		}
+//		int enCapCode;
+//		mv.visitLdcInsn(node.GetNodeSize());
+//		switch(temp.value.substring(0, temp.value.length()-slack)) {
+//		case "bool[]":
+//			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
+//			enCapCode = Opcodes.IASTORE;
+//			valType = "Z";
+//			break;
+//		case "byte[]":
+//			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BYTE);
+//			enCapCode = Opcodes.BASTORE;
+//			valType = "B";
+//			break;
+//		case "shrt[]":
+//			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_SHORT);
+//			enCapCode = Opcodes.SASTORE;
+//			valType = "S";
+//			break;
+//		case "int[]":
+//			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_INT);
+//			enCapCode = Opcodes.IASTORE;
+//			valType = "I";
+//			break;
+//		case "char[]":
+//			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_CHAR);
+//			enCapCode = Opcodes.CASTORE;
+//			valType = "C";
+//			break;
+//		case "long[]":
+//			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
+//			enCapCode = Opcodes.LASTORE;
+//			valType = "J";
+//			break;
+//		case "doub[]":
+//			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
+//			enCapCode = Opcodes.DASTORE;
+//			valType = "D";
+//			break;
+//		case "flt[]":
+//			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_FLOAT);
+//			enCapCode = Opcodes.FASTORE;
+//			valType = "F";
+//			break;
+//		default:
+//			valType = strToByte(temp.value.substring(0, temp.value.length()-slack-2));
+//			if (valType.contains("[")) {
+//				mv.visitTypeInsn(Opcodes.ANEWARRAY, valType);
+//			}
+//			else {
+//				mv.visitTypeInsn(Opcodes.ANEWARRAY, valType.substring(1, valType.length()-1));
+//			}
+//			
+//			enCapCode = Opcodes.AASTORE;
+//			
+//			break;
+//		}
+//		for (int i = 0; i < node.GetNodeSize(); i++) {
+//			mv.visitInsn(Opcodes.DUP);
+//			mv.visitLdcInsn(i);
+//			evalE(node.GetNode(i));
+//			castTopStackForVar(valType, popStack(), node.line);
+//			mv.visitInsn(enCapCode);
+//		}
+//		
+//		return (strToByte(temp.value.substring(0, temp.value.length()-slack)));
+//		
+//	}
 	
 	private void IfconditionalE(ASTNode node, Label label) {
 		if (node.type == TokenState.BOOLEAN) {
@@ -9285,7 +9590,12 @@ public class CodeCreator {
 			} else {
 				mv.visitLdcInsn(0);
 			}
-			mv.visitJumpInsn(Opcodes.IFNE, label);
+			mv.visitJumpInsn(Opcodes.IFEQ, label);
+			return;
+		}
+		else if (node.type == TokenState.IS) {
+			evalE(node);
+			mv.visitJumpInsn(Opcodes.IFEQ, label);
 			return;
 		}
 		
@@ -9564,11 +9874,13 @@ public class CodeCreator {
 			else {
 				Methodinfo = checkMethodvStack(tree.value, top, curStack.size()-size, genType, tree.line);
 			}
+			String desc = removeGenerics(Methodinfo[0]) + removeGenerics(Methodinfo[1]);
 			if (Methodinfo[2].contains("static")) {
 				invokeStatic(tree.value, IfImport(top), Methodinfo[0] + Methodinfo[1]);	
 			}
 			else {
-				invokePublic(tree.value, IfImport(top), Methodinfo[0] + Methodinfo[1]);	
+				System.out.println(desc);
+				invokePublic(tree.value, IfImport(top), desc);	
 			}
 
 			if (Methodinfo.length > 3 && Methodinfo[3] != null) {
@@ -9589,11 +9901,12 @@ public class CodeCreator {
 			size = curStack.size();
 			if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
 			Methodinfo = checkMethodvStack(tree.value, curName, curStack.size()-size, tree.line);
+			String desc = removeGenerics(Methodinfo[0]) + removeGenerics(Methodinfo[1]);
 			if (Methodinfo[2].contains("static")) {
-				invokeStatic(tree.value, curName, Methodinfo[0] + Methodinfo[1]);
+				invokeStatic(tree.value, curName, desc);
 			}
 			else {
-				invokePublic(tree.value, curName, Methodinfo[0] + Methodinfo[1]);
+				invokePublic(tree.value, curName, desc);
 			}
 
 			return Methodinfo[1];
@@ -9738,10 +10051,14 @@ public class CodeCreator {
 	}
 
 	public void Return(ASTNode tree) {
+		System.out.println("THISRET" + returnType);
 		if (returnType.equals("V")) {
+			System.out.println("?");
 			mv.visitInsn(Opcodes.RETURN);
 			return;
 		}
+		
+		
 		evalE(tree);
 		castTopStackForVar(returnType, popStack(), tree.line);
 		switch(returnType) {

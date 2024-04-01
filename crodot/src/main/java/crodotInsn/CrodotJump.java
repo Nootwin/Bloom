@@ -14,6 +14,10 @@ public class CrodotJump extends CrodotCode {
 	public void upload(MethodVisitor mv) {
 		mv.visitJumpInsn(opcode, label);
 	}
+
+	public String toString() {
+		return "visitJumpInsn(" + opcode + ", " + label + ")";
+	}
 	
 	
 }

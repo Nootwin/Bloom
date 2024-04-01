@@ -1,4 +1,14 @@
 import "java.util.ArrayList"
 
-ArrayList<String> arr = ArrayList<String>()
-print(arr.add("me"))
+class GenInput {
+	void test(ArrayList<Integer> i) {
+		
+	}
+}
+
+inp = GenInput()
+
+inp.test(ArrayList<Integer>())
+
+
+
