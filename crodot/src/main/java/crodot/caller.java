@@ -24,7 +24,7 @@ public class caller {
 		for (int z = 0; z < n; z++) {
 			System.out.print('-');
 		}
-		System.out.println(TokenStateToString(tree.type));
+		System.out.println(tree.value);
 		for (ASTNode i : tree.next) {
 			indtree(i, n+1);
 		}

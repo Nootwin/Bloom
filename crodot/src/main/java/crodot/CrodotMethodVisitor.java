@@ -111,17 +111,10 @@ public class CrodotMethodVisitor{
 	
 	public void apply() {
 		CrodotCode c;
+		debug();
 		while ((c = codes.poll()) != null) {
-			//err.add(c);
-			//try {
-				c.upload(mv);
-			//}
-			//catch(Exception e) {
-				//CrodotCode b;
-				//while ((b = err.poll()) != null) {
-					//System.out.println(b.toString());
-				//}
-			//}
+
+			c.upload(mv);
 			
 		}
 		
@@ -131,9 +124,6 @@ public class CrodotMethodVisitor{
 		System.out.println("START DEBUG");
 		for (CrodotCode c : codes) {
 			System.out.println(c.toString());
-			if (c instanceof CrodotInsn) {
-				System.out.print(((CrodotInsn) c).opcode);
-			}
 		}
 		System.out.println("END DEBUG");
 	}

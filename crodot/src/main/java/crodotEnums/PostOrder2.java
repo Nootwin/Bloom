@@ -10,36 +10,37 @@ public class PostOrder2 {
 	
 	public PostOrder2() {
 		map.put(TokenState.SEPERATOR, 0);
-		map.put(TokenState.TRUEEQUALS, 1);
-		map.put(TokenState.NOTEQUALS, 1);
-		map.put(TokenState.TRUEGREATERTHAN, 1);
-		map.put(TokenState.TRUELESSTHAN, 1);
-		map.put(TokenState.GREATERTHAN, 1);
-		map.put(TokenState.LESSTHAN, 1);
-		map.put(TokenState.NOT, 2);
-		map.put(TokenState.ADD, 2);
-		map.put(TokenState.SUB, 2);
-		map.put(TokenState.MUL, 2);
-		map.put(TokenState.DIV, 2);
-		map.put(TokenState.REM, 2);
-		map.put(TokenState.EXP, 2);
-		map.put(TokenState.DOT, 4);
-		map.put(TokenState.INCREMENT, 3);
-		map.put(TokenState.DECREMENT, 3);
-		map.put(TokenState.IDENTIFIER, 5);
-		map.put(TokenState.DECLARATION, 5);
-		map.put(TokenState.NUMBER, 5);
-		map.put(TokenState.STRING, 5);
-		map.put(TokenState.CHAR, 5);
-		map.put(TokenState.BOOLEAN, 5);
-		map.put(TokenState.RIGHTBRACE, 6);
-		map.put(TokenState.RIGHTBRACKET, 6);
-		map.put(TokenState.LEFTBRACE, 7);
-		map.put(TokenState.LEFTBRACKET, 7);
-		map.put(TokenState.RIGHTGENERIC, 7);
-//		FUN(5),
-//		ARR(5),
-//		GENFUN(5),
+		map.put(TokenState.EQUIVALENCY, 1);
+		map.put(TokenState.TRUEEQUALS, 2);
+		map.put(TokenState.NOTEQUALS, 2);
+		map.put(TokenState.TRUEGREATERTHAN, 2);
+		map.put(TokenState.TRUELESSTHAN, 2);
+		map.put(TokenState.GREATERTHAN, 2);
+		map.put(TokenState.LESSTHAN, 2);
+		map.put(TokenState.NOT, 3);
+		map.put(TokenState.ADD, 3);
+		map.put(TokenState.SUB, 3);
+		map.put(TokenState.MUL, 3);
+		map.put(TokenState.DIV, 3);
+		map.put(TokenState.REM, 3);
+		map.put(TokenState.EXP, 3);
+		map.put(TokenState.INCREMENT, 4);
+		map.put(TokenState.DECREMENT, 4);
+		map.put(TokenState.DOT, 5);
+		map.put(TokenState.IDENTIFIER, 6);
+		map.put(TokenState.DECLARATION, 6);
+		map.put(TokenState.NUMBER, 6);
+		map.put(TokenState.STRING, 6);
+		map.put(TokenState.CHAR, 6);
+		map.put(TokenState.BOOLEAN, 6);
+		map.put(TokenState.RIGHTBRACE, 7);
+		map.put(TokenState.RIGHTBRACKET, 7);
+		map.put(TokenState.LEFTBRACE, 8);
+		map.put(TokenState.LEFTBRACKET, 8);
+		map.put(TokenState.RIGHTGENERIC, 8);
+//		FUN(6),
+//		ARR(6),
+//		GENFUN(6),
 		
 	}
 	
@@ -51,7 +52,7 @@ public class PostOrder2 {
 		if (x != null) {
 			return x;
 		}
-		return 128;
+		return 238;
 	}
 	
 }

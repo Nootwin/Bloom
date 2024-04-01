@@ -13,4 +13,8 @@ public class CrodotInsn extends CrodotCode {
 	public void upload(MethodVisitor mv) {
 		mv.visitInsn(opcode);
 	}
+
+	public String toString() {
+		return "mv.visitInsn(" + opcode + ");";
+	}
 }

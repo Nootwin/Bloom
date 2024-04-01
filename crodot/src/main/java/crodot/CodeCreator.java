@@ -77,8 +77,7 @@ public class CodeCreator {
 	public void ClearStack() {
 		if (mv != null ) {
 			while (!curStack.isEmpty()) {
-
-				
+				curStack.pop();
 				mv.visitInsn(Opcodes.POP);
 			}
 		}
@@ -818,10 +817,11 @@ public class CodeCreator {
 		
 	}
 	public void uninitnewVar(String name, String type, int line) {
-		if (!results.Classes.containsKey(IfImport(type))) {
+		String t = strToByte(type);
+		if (t.length() > 1 && (!results.Classes.containsKey(IfImport(type)))) {
 			err.UnknownClassException(line, name, type);
 		}
-		vars.add(name, new VarInfo(name, type, vars.getLength()));
+		vars.add(name, new VarInfo(name, t, vars.getLength()));
 	}
 	
 	public void newVar(String name, String type, ASTNode generic, int lineNum) {
@@ -861,16 +861,16 @@ public class CodeCreator {
 		String type = popStack();
 		LinkedHashMap<String, String> generic = sigToHash(type);
 		switch(type) {
-		case "I", "Z", "bool", "byte", "shrt", "int", "char":
+		case "I", "Z", "S", "B", "C":
 			mv.visitVarInsn(Opcodes.ISTORE, vars.getLength());
 			break;
-		case "long", "J":
+		case "J":
 			mv.visitVarInsn(Opcodes.LSTORE, vars.getLength());
 			break;
-		case "doub", "D":
+		case "D":
 			mv.visitVarInsn(Opcodes.DSTORE, vars.getLength());
 			break;
-		case "flt":
+		case "F":
 			mv.visitVarInsn(Opcodes.FSTORE, vars.getLength());
 			break;
 		default:
@@ -897,7 +897,7 @@ public class CodeCreator {
 		String add;
 		VarInfo var;
 		ASTNode node = bode;
-		if (vars.contains(name)) {
+		if (vars.contains(name) && (node.prev.type != TokenState.DOT || (node.prev.prev.type != TokenState.DOT && node == node.prev.GetFirstNode()))) {
 			if (node.prev.type == TokenState.INCREMENT || node.prev.type == TokenState.DECREMENT) { 
 				add = "VAR";
 			}
@@ -988,7 +988,7 @@ public class CodeCreator {
 	public void storeVar(String name, ASTNode node) {
 		
 		VarInfo var;
-		if (vars.contains(name)) {
+		if (vars.contains(name) && (node.prev.type != TokenState.DOT || (node.prev.prev.type != TokenState.DOT && node == node.prev.GetFirstNode()))) {
 			var = vars.get(name);
 			castTopStackForVar(var.type, popStack(), node.line);
 			switch(var.type) {
@@ -1642,8 +1642,20 @@ public class CodeCreator {
 		
 		
 	}
-
+	
 	public void conditionalE(ASTNode node, Label label) {
+		evalE(node.GetFirstNode());
+		StackInfo s1 = curStack.pop();
+		evalE(node.GetNode(1));
+		StackInfo s2 = curStack.pop();
+		
+		String fType;
+		if(!s1.type.equals(s2.type)) {
+			fType = castBothTG(s1, s2);
+		}
+		else {
+			fType = s1.type;
+		}
 		switch(node.type) {
 		case TokenState.BOOLEAN:
 			if (node.value.equals("true")) {
@@ -1652,41 +1664,183 @@ public class CodeCreator {
 			else {
 				mv.visitLdcInsn(0);
 			}
-			mv.visitJumpInsn(Opcodes.IFNE, label);
+			mv.visitJumpInsn(Opcodes.IFEQ, label);
 			break;
 		case TokenState.TRUEEQUALS:
-
-			evalE(node.GetFirstNode());
-			evalE(node.GetNode(1));
-			CTrueEquals(label);
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPNE, label);
+				break;
+			case "J":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFNE, label);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFNE, label);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.DCMPL);
+				mv.visitJumpInsn(Opcodes.IFNE, label);
+				break;
+			default:
+				mv.visitJumpInsn(Opcodes.IF_ACMPNE, label);
+				break;
+			}
 			break;
 		case TokenState.NOTEQUALS:
-			evalE(node.GetFirstNode());
-			evalE(node.GetNode(1));
-			CNotEquals(label);
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPEQ, label);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFEQ, label);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFEQ, label);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.DCMPL);
+				mv.visitJumpInsn(Opcodes.IFEQ, label);
+				break;
+			default:
+				mv.visitJumpInsn(Opcodes.IF_ACMPEQ, label);
+				break;
+			}
 			break;
 		case TokenState.TRUEGREATERTHAN:
-			evalE(node.GetFirstNode());
-			evalE(node.GetNode(1));
-			CTrueGreaterThan(label);
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPLT, label);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFLT, label);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFLT, label);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.DCMPL);
+				mv.visitJumpInsn(Opcodes.IFLT, label);
+				break;
+			default:
+				//err
+			}
 			break;
 		case TokenState.TRUELESSTHAN:
-			evalE(node.GetFirstNode());
-			evalE(node.GetNode(1));
-			CTrueLessThan(label);
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPGT, label);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFGT, label);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFGT, label);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.DCMPL);
+				mv.visitJumpInsn(Opcodes.IFGT, label);
+				break;
+			default:
+				//err
+			}
 			break;
 		case TokenState.GREATERTHAN:
-			evalE(node.GetFirstNode());
-			evalE(node.GetNode(1));
-			CGreaterThan(label);
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPLE, label);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFLE, label);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFLE, label);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.DCMPL);
+				mv.visitJumpInsn(Opcodes.IFLE, label);
+				break;
+			default:
+				//err
+			}
 			break;
 		case TokenState.LESSTHAN:
-			evalE(node.GetFirstNode());
-			evalE(node.GetNode(1));
-			CLessThan(label);
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPGE, label);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFGE, label);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFGE, label);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.DCMPL);
+				mv.visitJumpInsn(Opcodes.IFGE, label);
+				break;
+			default:
+				//err
+			}
 			break;
 		}
 	}
+
+//	public void conditionalE(ASTNode node, Label label) {
+//		switch(node.type) {
+//		case TokenState.BOOLEAN:
+//			if (node.value.equals("true")) {
+//				mv.visitLdcInsn(1);
+//			}
+//			else {
+//				mv.visitLdcInsn(0);
+//			}
+//			mv.visitJumpInsn(Opcodes.IFNE, label);
+//			break;
+//		case TokenState.TRUEEQUALS:
+//
+//			evalE(node.GetFirstNode());
+//			evalE(node.GetNode(1));
+//			CTrueEquals(label);
+//			break;
+//		case TokenState.NOTEQUALS:
+//			evalE(node.GetFirstNode());
+//			evalE(node.GetNode(1));
+//			CNotEquals(label);
+//			break;
+//		case TokenState.TRUEGREATERTHAN:
+//			evalE(node.GetFirstNode());
+//			evalE(node.GetNode(1));
+//			CTrueGreaterThan(label);
+//			break;
+//		case TokenState.TRUELESSTHAN:
+//			evalE(node.GetFirstNode());
+//			evalE(node.GetNode(1));
+//			CTrueLessThan(label);
+//			break;
+//		case TokenState.GREATERTHAN:
+//			evalE(node.GetFirstNode());
+//			evalE(node.GetNode(1));
+//			CGreaterThan(label);
+//			break;
+//		case TokenState.LESSTHAN:
+//			evalE(node.GetFirstNode());
+//			evalE(node.GetNode(1));
+//			CLessThan(label);
+//			break;
+//		}
+//	}
 	
 	private void CLessThan(Label l) {
 		StackInfo s1 = curStack.pop();
@@ -2453,8 +2607,14 @@ public class CodeCreator {
 	
 	public String evalE(ASTNode node) {
 		switch(node.type) {
+		case TokenState.EQUIVALENCY:
+			if (node.value.equals("=") || node.prev.type != TokenState.CODE || node.prev.type != TokenState.START) {
+				return curStack.push(new StackInfo(equalsInStatement(node, true), mv.size())).type;
+			}
+			return equalsInStatement(node, false);
+			
+			
 		case TokenState.TRUEEQUALS, TokenState.NOTEQUALS, TokenState.TRUEGREATERTHAN, TokenState.TRUELESSTHAN, TokenState.GREATERTHAN, TokenState.LESSTHAN:
-			System.out.println("RANHERE");
 			return booleanOperator(node);
 		case TokenState.DOT:
 			if (node.GetNodeSize() < 3) {
@@ -2468,7 +2628,7 @@ public class CodeCreator {
 				return evalE(node.GetNode(1), "!E");
 			}
 			
-			
+			//hey future nolan, you gotta switch the s1 and s2 arguements 
 			
 		case TokenState.INCREMENT:
 			return EIncrement(node, 1);
@@ -2545,27 +2705,27 @@ public class CodeCreator {
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(EAdd(node.line), mv.size())).type;
+			return curStack.push(new StackInfo(Add(curStack.pop(), curStack.pop(), node.line), mv.size())).type;
 		case TokenState.SUB:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(ESub(node.line), mv.size())).type;
+			return curStack.push(new StackInfo(Sub(curStack.pop(), curStack.pop(), node.line), mv.size())).type;
 		case TokenState.MUL:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(EMul(node.line), mv.size())).type;
+			return curStack.push(new StackInfo(Mul(curStack.pop(), curStack.pop(), node.line), mv.size())).type;
 		case TokenState.DIV:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(EDiv(node.line), mv.size())).type;
+			return curStack.push(new StackInfo(Div(curStack.pop(), curStack.pop(), node.line), mv.size())).type;
 		case TokenState.REM:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(ERem(node.line), mv.size())).type;
+			return curStack.push(new StackInfo(Rem(curStack.pop(), curStack.pop(), node.line), mv.size())).type;
 		case TokenState.EXP:
 			break;
 			//to be done
@@ -2574,9 +2734,275 @@ public class CodeCreator {
 		return "NULL";
 	}
 	
+	private String equalsInStatement(ASTNode node, boolean leave) {
+		String parent;
+		String setTo;
+		ASTNode left = node.GetFirstNode();
+		ASTNode right = node.GetNode(1);
+		switch(left.type) {
+		case TokenState.IDENTIFIER:
+			System.out.println(node.value);
+			switch(node.value) {
+			case "+=":
+				setTo = Add(new StackInfo(loadVar(left.value, left), mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+				break;
+			case "-=":
+				setTo = Sub(new StackInfo(loadVar(left.value, left), mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+				break;
+			case "*=":
+				setTo = Mul(new StackInfo(loadVar(left.value, left), mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+				break;
+			case "/=":
+				setTo = Div(new StackInfo(loadVar(left.value, left), mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+				break;
+			case "%=":
+				setTo = Rem(new StackInfo(loadVar(left.value, left), mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+				break;
+			default:
+				setTo = evalE(right);
+				break;
+			}
+			
+			
+			if (leave) {
+				if (setTo.equals("J") || setTo.equals("D")) {
+					mv.visitInsn(Opcodes.DUP2);
+				} else {
+					mv.visitInsn(Opcodes.DUP);
+				}
+			}
+			storeVar(left.value, left);
+			
+			return vars.get(left.value).type;
+		case TokenState.DOT:
+			parent = evalE(left.GetFirstNode());
+			curStack.pop();
+			ClassInfo info = results.Classes.get(stripObj(parent));
+			if (left.GetNode(1).type == TokenState.ARR) {
+				mv.visitFieldInsn(Opcodes.GETFIELD, info.name, left.GetNode(1).value, info.fields.get(left.GetNode(1).value).type);
+				
+				String parent2 = info.fields.get(left.GetNode(1).value).type;
+				for (int i = 0; i < left.GetNode(1).GetNodeSize()-1; i++) {
+					evalE(left.GetNode(1).GetNode(i));
+					mv.visitInsn(Opcodes.AALOAD);
+					parent2 = parent2.substring(1);
+					curStack.pop();
+				}
+				evalE(left.GetNode(1).GetLastNode());
+				curStack.pop();
+				String subtype = parent2.substring(1);
+				switch(node.value) {
+				case "+=":
+					mv.visitInsn(Opcodes.DUP2);
+					loadArr(parent2);
+					setTo = Add(new StackInfo(subtype, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+					break;
+				case "-=":
+					mv.visitInsn(Opcodes.DUP2);
+					loadArr(parent2);
+					setTo = Sub(new StackInfo(subtype, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+					break;
+				case "*=":
+					mv.visitInsn(Opcodes.DUP2);
+					loadArr(parent2);
+					setTo = Div(new StackInfo(subtype, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+					break;
+				case "/=":
+					mv.visitInsn(Opcodes.DUP2);
+					loadArr(parent2);
+					setTo = Mul(new StackInfo(subtype, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+					break;
+				case "%=":
+					mv.visitInsn(Opcodes.DUP2);
+					loadArr(parent2);
+					setTo = Rem(new StackInfo(subtype, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+					break;
+				default:
+					setTo = evalE(right);
+					break;
+				}
+				castTopStackForVar(subtype, setTo, node.line);
+				if (leave) {
+					if (parent2.equals("[J") || parent2.equals("[D")) {
+						mv.visitInsn(Opcodes.DUP2_X2);
+					} else {
+						mv.visitInsn(Opcodes.DUP_X2);
+					}
+				}
+				curStack.pop();
+				switch(parent2) {
+				case "[I":
+					mv.visitInsn(Opcodes.IASTORE);
+					return "I";
+				case "[S":
+					mv.visitInsn(Opcodes.SASTORE);
+					return "S";
+				case "[B":
+					mv.visitInsn(Opcodes.BASTORE);
+					return "B";
+				case "[C":
+					mv.visitInsn(Opcodes.CASTORE);
+					return "C";
+				case "[J":
+					mv.visitInsn(Opcodes.LASTORE);
+					return "J";
+				case "[F":
+					mv.visitInsn(Opcodes.FASTORE);
+					return "F";
+				case "[D":
+					mv.visitInsn(Opcodes.DASTORE);
+					return "D";
+				case "[Z":
+					mv.visitInsn(Opcodes.BASTORE);
+					return "Z";
+				default:
+					mv.visitInsn(Opcodes.AASTORE);
+					return parent2.substring(1);
+				}
+			}
+			else {
+				String type = info.fields.get(left.GetNode(1).value).type;
+				switch(node.value) {
+				case "+=":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitFieldInsn(Opcodes.GETFIELD, info.name, left.GetNode(1).value, type);
+					setTo = Add(new StackInfo(type, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+					break;
+				case "-=":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitFieldInsn(Opcodes.GETFIELD, info.name, left.GetNode(1).value, type);
+					setTo = Sub(new StackInfo(type, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+					break;
+				case "*=":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitFieldInsn(Opcodes.GETFIELD, info.name, left.GetNode(1).value, type);
+					setTo = Div(new StackInfo(type, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+					break;
+				case "/=":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitFieldInsn(Opcodes.GETFIELD, info.name, left.GetNode(1).value, type);
+					setTo = Mul(new StackInfo(type, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+					break;
+				case "%=":
+					mv.visitInsn(Opcodes.DUP);
+					mv.visitFieldInsn(Opcodes.GETFIELD, info.name, left.GetNode(1).value, type);
+					setTo = Rem(new StackInfo(type, mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+					break;
+				default:
+					setTo = evalE(right);
+					break;
+				}
+				castTopStackForVar(type, setTo, node.line);
+				if (leave) {
+					if (type.equals("J") || type.equals("D")) {
+						mv.visitInsn(Opcodes.DUP2_X1);
+					} else {
+						mv.visitInsn(Opcodes.DUP_X1);
+					}
+				}
+				mv.visitFieldInsn(Opcodes.PUTFIELD, info.name, left.GetNode(1).value, type);
+				curStack.pop();
+				return type;
+			}
+			
+		case TokenState.ARR:
+			parent = loadVar(left.value, left);
+			for (int i = 0; i < left.GetNodeSize()-1; i++) {
+				evalE(left.GetNode(i));
+				mv.visitInsn(Opcodes.AALOAD);
+				parent = parent.substring(1);
+				curStack.pop();
+			}
+			evalE(left.GetLastNode());
+			switch(node.value) {
+			case "+=":
+				mv.visitInsn(Opcodes.DUP2);
+				loadArr(parent);
+				setTo = Add(new StackInfo(parent.substring(1), mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+				break;
+			case "-=":
+				mv.visitInsn(Opcodes.DUP2);
+				loadArr(parent);
+				setTo = Sub(new StackInfo(parent.substring(1), mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+				break;
+			case "*=":
+				mv.visitInsn(Opcodes.DUP2);
+				loadArr(parent);
+				setTo = Div(new StackInfo(parent.substring(1), mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+				break;
+			case "/=":
+				mv.visitInsn(Opcodes.DUP2);
+				loadArr(parent);
+				setTo = Mul(new StackInfo(parent.substring(1), mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+				break;
+			case "%=":
+				mv.visitInsn(Opcodes.DUP2);
+				loadArr(parent);
+				setTo = Rem(new StackInfo(parent.substring(1), mv.size()), new StackInfo(evalE(right), mv.size()), node.line);
+				break;
+			default:
+				setTo = evalE(right);
+				break;
+			}
+			castTopStackForVar(parent.substring(1), setTo, node.line);
+			if (leave) {
+				if (parent.equals("[J") || parent.equals("[D")) {
+					mv.visitInsn(Opcodes.DUP2_X2);
+				} else {
+					mv.visitInsn(Opcodes.DUP_X2);
+				}
+			}
+			curStack.pop();
+			curStack.pop();
+			switch(parent) {
+			case "[I":
+				mv.visitInsn(Opcodes.IASTORE);
+				return "I";
+			case "[S":
+				mv.visitInsn(Opcodes.SASTORE);
+				return "S";
+			case "[B":
+				mv.visitInsn(Opcodes.BASTORE);
+				return "B";
+			case "[C":
+				mv.visitInsn(Opcodes.CASTORE);
+				return "C";
+			case "[J":
+				mv.visitInsn(Opcodes.LASTORE);
+				return "J";
+			case "[F":
+				mv.visitInsn(Opcodes.FASTORE);
+				return "F";
+			case "[D":
+				mv.visitInsn(Opcodes.DASTORE);
+				return "D";
+			case "[Z":
+				mv.visitInsn(Opcodes.BASTORE);
+				return "Z";
+			default:
+				mv.visitInsn(Opcodes.AASTORE);
+				return parent.substring(1);
+			}
+		}
+		return null;
+	}
+
 	private String castBothTG(StackInfo s1, StackInfo s2) {
 		System.out.println(s1.type + s2.type);
 		switch(s1.type) {
+		case "Z":
+			switch(s2.type) {
+			case "Z":
+				return "Z";
+			case "Ljava/lang/Boolean;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Boolean", "booleanValue", "()Z", false),s2.posInQueue);
+				return "Z";
+			case "Ljava/lang/String;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(Z)Ljava/lang/String;", false), s1.posInQueue);
+				return "Ljava/lang/String;";
+			default:
+				//err
+			}
 		case "B", "S", "I", "C":
 			switch(s2.type) {
 			case "B", "S", "I", "C":
@@ -2614,6 +3040,9 @@ public class CodeCreator {
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				return "D";
+			case "Ljava/lang/String;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(" + s1.type + ")Ljava/lang/String;", false), s1.posInQueue);
+				return "Ljava/lang/String;";
 			default:
 				//err
 			}
@@ -2657,6 +3086,9 @@ public class CodeCreator {
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				return "D";
+			case "Ljava/lang/String;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(J)Ljava/lang/String;", false), s1.posInQueue);
+				return "Ljava/lang/String;";
 			default:
 				//err
 			}
@@ -2701,6 +3133,9 @@ public class CodeCreator {
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				return "D";
+			case "Ljava/lang/String;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf","(F)Ljava/lang/String;", false), s1.posInQueue);
+				return "Ljava/lang/String;";
 			default:
 				//err
 			}
@@ -2744,6 +3179,21 @@ public class CodeCreator {
 			case "Ljava/lang/Double;":
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
 				return "D";
+			case "Ljava/lang/String;":
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(D)Ljava/lang/String;", false), s1.posInQueue);
+				return "Ljava/lang/String;";
+			default:
+				//err
+			}
+		case "Ljava/lang/Boolean;":
+			switch(s2.type) {
+			case "Z":
+				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Boolean", "booleanValue", "()Z", false),s1.posInQueue);
+				return "Z";
+			case "Ljava/lang/Boolean;":
+				return "Ljava/lang/Boolean;";
+			case "Ljava/lang/String;":
+				return "Ljava/lang/String;";
 			default:
 				//err
 			}
@@ -2792,6 +3242,8 @@ public class CodeCreator {
 				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
 				return "D";
+			case "Ljava/lang/String;":
+				return "Ljava/lang/String;";
 			default:
 				//err
 			}
@@ -2841,6 +3293,8 @@ public class CodeCreator {
 				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
 				return "D";
+			case "Ljava/lang/String;":
+				return "Ljava/lang/String;";
 			default:
 				//err
 			}
@@ -2890,6 +3344,8 @@ public class CodeCreator {
 				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
 				return "D";
+			case "Ljava/lang/String;":
+				return "Ljava/lang/String;";
 			default:
 				//err
 			}
@@ -2939,6 +3395,8 @@ public class CodeCreator {
 				mv.insert(new CrodotInsn(Opcodes.I2D), s1.posInQueue);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false), s1.posInQueue);
 				return "D";
+			case "Ljava/lang/String;":
+				return "Ljava/lang/String;";
 			default:
 				//err
 			}
@@ -2991,6 +3449,8 @@ public class CodeCreator {
 				mv.insert(new CrodotInsn(Opcodes.L2D), s1.posInQueue);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false), s1.posInQueue);
 				return "D";
+			case "Ljava/lang/String;":
+				return "Ljava/lang/String;";
 			default:
 				//err
 			}
@@ -3043,6 +3503,8 @@ public class CodeCreator {
 				mv.insert(new CrodotInsn(Opcodes.F2D), s1.posInQueue);
 				mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
 				return "D";
+			case "Ljava/lang/String;":
+				return "Ljava/lang/String;";
 			default:
 				//err
 			}
@@ -3095,10 +3557,42 @@ public class CodeCreator {
 				return "D";
 			case "Ljava/lang/Double;":
 				return "Ljava/lang/Double;";
+			case "Ljava/lang/String;":
+				return "Ljava/lang/String;";
 			default:
 				//err
 			}
-		
+		case "Ljava/lang/String;":
+			switch (s2.type) {
+			case "B":
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(B)Ljava/lang/String;", false), s2.posInQueue);
+				return "Ljava/lang/String;";
+			case "S":
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(S)Ljava/lang/String;", false), s2.posInQueue);
+				return "Ljava/lang/String;";
+			case "I":
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(I)Ljava/lang/String;",
+						false), s2.posInQueue);
+				return "Ljava/lang/String;";
+			case "C":
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(C)Ljava/lang/String;",
+						false), s2.posInQueue);
+				return "Ljava/lang/String;";
+			case "J":
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(J)Ljava/lang/String;",
+						false), s2.posInQueue);
+				return "Ljava/lang/String;";
+			case "F":
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(F)Ljava/lang/String;",
+						false), s2.posInQueue);
+				return "Ljava/lang/String;";
+			case "D":
+				mv.insert(new CrodotMethod(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf", "(D)Ljava/lang/String;",
+                        false), s2.posInQueue);
+                return "Ljava/lang/String;";
+			default:
+				return "Ljava/lang/String;";
+			}
 			
 			
 			
@@ -3136,7 +3630,7 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFNE, l1);
 				break;
 			case "D":
-				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFNE, l1);
 				break;
 			default:
@@ -3158,7 +3652,7 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFEQ, l1);
 				break;
 			case "D":
-				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFEQ, l1);
 				break;
 			default:
@@ -3180,7 +3674,7 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFLT, l1);
 				break;
 			case "D":
-				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLT, l1);
 				break;
 			default:
@@ -3201,7 +3695,7 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFGT, l1);
 				break;
 			case "D":
-				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGT, l1);
 				break;
 			default:
@@ -3222,7 +3716,7 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFLE, l1);
 				break;
 			case "D":
-				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFLE, l1);
 				break;
 			default:
@@ -3243,7 +3737,7 @@ public class CodeCreator {
 				mv.visitJumpInsn(Opcodes.IFGE, l1);
 				break;
 			case "D":
-				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitInsn(Opcodes.DCMPL);
 				mv.visitJumpInsn(Opcodes.IFGE, l1);
 				break;
 			default:
@@ -3942,6 +4436,11 @@ public class CodeCreator {
 	public String evalE(ASTNode node, String TypeExpected) {
 
 		switch(node.type) {
+		case TokenState.EQUIVALENCY:
+			if (node.value.equals("=") || node.prev.type != TokenState.CODE || node.prev.type != TokenState.START) {
+				return curStack.push(new StackInfo(equalsInStatement(node, true), mv.size())).type;
+			}
+			return equalsInStatement(node, false);
 		case TokenState.TRUEEQUALS, TokenState.NOTEQUALS, TokenState.TRUEGREATERTHAN, TokenState.TRUELESSTHAN, TokenState.GREATERTHAN, TokenState.LESSTHAN:
 			System.out.println("RANHERE");
 			return booleanOperator(node);
@@ -4064,27 +4563,27 @@ public class CodeCreator {
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(EAdd(node.line), mv.size())).type;
+			return curStack.push(new StackInfo(Add(curStack.pop(), curStack.pop(), node.line), mv.size())).type;
 		case TokenState.SUB:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(ESub(node.line), mv.size())).type;
+			return curStack.push(new StackInfo(Sub(curStack.pop(), curStack.pop(), node.line), mv.size())).type;
 		case TokenState.MUL:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(EMul(node.line), mv.size())).type;
+			return curStack.push(new StackInfo(Mul(curStack.pop(), curStack.pop(), node.line), mv.size())).type;
 		case TokenState.DIV:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(EDiv(node.line), mv.size())).type;
+			return curStack.push(new StackInfo(Div(curStack.pop(), curStack.pop(), node.line), mv.size())).type;
 		case TokenState.REM:
 			evalE(node.GetFirstNode());
 			evalE(node.GetNode(1));
 			
-			return curStack.push(new StackInfo(ERem(node.line), mv.size())).type;
+			return curStack.push(new StackInfo(Rem(curStack.pop(), curStack.pop(), node.line), mv.size())).type;
 		case TokenState.EXP:
 			break;
 			//to be done
@@ -7166,6 +7665,7 @@ public class CodeCreator {
 		
 	}
 	private String ERem(int line) {
+
 		StackInfo s1 = curStack.pop();
 		StackInfo s2 = curStack.pop();
 		
@@ -7858,11 +8358,370 @@ public class CodeCreator {
 	}
 
 
+	private String Add(StackInfo s2, StackInfo s1, int line) {
+		String type = castBothTG(s1, s2);
+		switch(type) {
+		case "B", "S", "I", "C":
+			mv.visitInsn(Opcodes.IADD);
+			return "I";
+		case "J":
+			mv.visitInsn(Opcodes.LADD);
+			return "J";
+		case "F":
+			mv.visitInsn(Opcodes.FADD);
+			return "F";
+		case "D":
+			mv.visitInsn(Opcodes.DADD);
+			return "D";
+		case "Ljava/lang/Byte;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.IADD);
+			return "I";
+		case "Ljava/lang/Short;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.IADD);
+			return "I";
+		case "Ljava/lang/Character;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.IADD);
+			return "I";
+		case "Ljava/lang/Integer;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false),s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false),s1.posInQueue);
+			mv.visitInsn(Opcodes.IADD);
+			return "I";
+		case "Ljava/lang/Long;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.LADD);
+			return "J";
+		case "Ljava/lang/Float;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false),	s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.FADD);
+			return "F";
+		case "Ljava/lang/Double;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.DADD);	
+			return "D";
+		case "Ljava/lang/String;":
+			if (s1.type.equals("Ljava/lang/String;")) {
+				switch(s2.type) { 
+				case "B", "S", "I", "C", "J", "D", "F":
+					
+					mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue+1);
+					mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue+1);
+					
+				
+					//one before other for efficiency as it pushes
+					mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
+					//one before other for efficiency as it pushes
+					//one before other for efficiency as it pushes
+					mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+					mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
+				    return "Ljava/lang/String;";
+				case "Ljava/lang/String;":
+					mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+					mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
+					
+					//one before other for efficiency as it pushes
+					mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
+					//one before other for efficiency as it pushes
+					//one before other for efficiency as it pushes
+					mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+					mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
+					return "Ljava/lang/String;";
+				default:
+					mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+					mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
+					
+					//one before other for efficiency as it pushes
+					mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue);
+					//one before other for efficiency as it pushes
+					//one before other for efficiency as it pushes
+					mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+					mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
+					return "Ljava/lang/String;";
+				}
+			}
+			else {
+				switch(s1.type) { 
+				case "B", "S", "I", "C", "J", "D", "F":
+					System.out.println("here");
+					mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue+1);
+					mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue+1);
+
+				
+					//one before other for efficiency as it pushes
+					mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false), s1.posInQueue+1);
+					//one before other for efficiency as it pushes
+					//one before other for efficiency as it pushes
+					mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+					mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
+				
+			
+				
+				    return "Ljava/lang/String;";
+				default:
+					mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false), s2.posInQueue);
+					mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false), s2.posInQueue);
+					
+					//one before other for efficiency as it pushes
+					mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;", false), s1.posInQueue);
+					mv.insert(new CrodotMethod(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "()V", false), s1.posInQueue-1);
+					//one before other for efficiency as it pushes
+					//one before other for efficiency as it pushes
+					mv.insert(new CrodotInsn(Opcodes.DUP), s1.posInQueue-1);
+					mv.insert(new CrodotType(Opcodes.NEW, "java/lang/StringBuilder"), s1.posInQueue-1);
+					
+					return "Ljava/lang/String;";
+				}
+			}
+		default:
+			err.UnknownArithmeticInputException(line, TokenState.ADD, s1.type, s2.type);
+			return null;
+		}
+		
+		
+	}
+	
+	private String Rem(StackInfo s2, StackInfo s1, int line) {
+		String type = castBothTG(s1, s2);
+		switch(type) {
+		case "B", "S", "I", "C":
+			mv.visitInsn(Opcodes.IREM);
+			return "I";
+		case "J":
+			mv.visitInsn(Opcodes.LREM);
+			return "J";
+		case "F":
+			mv.visitInsn(Opcodes.FREM);
+			return "F";
+		case "D":
+			mv.visitInsn(Opcodes.DREM);
+			return "D";
+		case "Ljava/lang/Byte;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.IREM);
+			return "I";
+		case "Ljava/lang/Short;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.IREM);
+			return "I";
+		case "Ljava/lang/Character;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.IREM);
+			return "I";
+		case "Ljava/lang/Integer;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false),s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false),s1.posInQueue);
+			mv.visitInsn(Opcodes.IREM);
+			return "I";
+		case "Ljava/lang/Long;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.LREM);
+			return "J";
+		case "Ljava/lang/Float;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false),	s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.FREM);
+			return "F";
+		case "Ljava/lang/Double;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.DREM);	
+			return "D";
+		default:
+			err.UnknownArithmeticInputException(line, TokenState.REM, s1.type, s2.type);
+			return null;
+		}
+		
+		
+	}
+	
+	private String Div(StackInfo s2, StackInfo s1, int line) {
+		String type = castBothTG(s1, s2);
+		switch(type) {
+		case "B", "S", "I", "C":
+			mv.visitInsn(Opcodes.IDIV);
+			return "I";
+		case "J":
+			mv.visitInsn(Opcodes.LDIV);
+			return "J";
+		case "F":
+			mv.visitInsn(Opcodes.FDIV);
+			return "F";
+		case "D":
+			mv.visitInsn(Opcodes.DDIV);
+			return "D";
+		case "Ljava/lang/Byte;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.IDIV);
+			return "I";
+		case "Ljava/lang/Short;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.IDIV);
+			return "I";
+		case "Ljava/lang/Character;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.IDIV);
+			return "I";
+		case "Ljava/lang/Integer;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false),s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false),s1.posInQueue);
+			mv.visitInsn(Opcodes.IDIV);
+			return "I";
+		case "Ljava/lang/Long;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.LDIV);
+			return "J";
+		case "Ljava/lang/Float;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false),	s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.FDIV);
+			return "F";
+		case "Ljava/lang/Double;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.DDIV);	
+			return "D";
+		default:
+			err.UnknownArithmeticInputException(line, TokenState.DIV, s1.type, s2.type);
+			return null;
+		}
+		
+		
+	}
+
+	private String Mul(StackInfo s2, StackInfo s1, int line) {
+		String type = castBothTG(s1, s2);
+		switch(type) {
+		case "B", "S", "I", "C":
+			mv.visitInsn(Opcodes.IMUL);
+			return "I";
+		case "J":
+			mv.visitInsn(Opcodes.LMUL);
+			return "J";
+		case "F":
+			mv.visitInsn(Opcodes.FMUL);
+			return "F";
+		case "D":
+			mv.visitInsn(Opcodes.DMUL);
+			return "D";
+		case "Ljava/lang/Byte;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.IMUL);
+			return "I";
+		case "Ljava/lang/Short;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.IMUL);
+			return "I";
+		case "Ljava/lang/Character;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.IMUL);
+			return "I";
+		case "Ljava/lang/Integer;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false),s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false),s1.posInQueue);
+			mv.visitInsn(Opcodes.IMUL);
+			return "I";
+		case "Ljava/lang/Long;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.LMUL);
+			return "J";
+		case "Ljava/lang/Float;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false),	s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.FMUL);
+			return "F";
+		case "Ljava/lang/Double;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.DMUL);	
+			return "D";
+		default:
+			err.UnknownArithmeticInputException(line, TokenState.MUL, s1.type, s2.type);
+			return null;
+		}
+		
+		
+	}
 
 
-
-
-
+	private String Sub(StackInfo s2, StackInfo s1, int line) {
+		String type = castBothTG(s1, s2);
+		switch(type) {
+		case "B", "S", "I", "C":
+			mv.visitInsn(Opcodes.ISUB);
+			return "I";
+		case "J":
+			mv.visitInsn(Opcodes.LSUB);
+			return "J";
+		case "F":
+			mv.visitInsn(Opcodes.FSUB);
+			return "F";
+		case "D":
+			mv.visitInsn(Opcodes.DSUB);
+			return "D";
+		case "Ljava/lang/Byte;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Byte", "byteValue", "()B", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.ISUB);
+			return "I";
+		case "Ljava/lang/Short;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Short", "shortValue", "()S", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.ISUB);
+			return "I";
+		case "Ljava/lang/Character;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Character", "charValue", "()C", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.ISUB);
+			return "I";
+		case "Ljava/lang/Integer;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false),s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false),s1.posInQueue);
+			mv.visitInsn(Opcodes.ISUB);
+			return "I";
+		case "Ljava/lang/Long;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()L", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.LSUB);
+			return "J";
+		case "Ljava/lang/Float;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false),	s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Float", "floatValue", "()F", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.FSUB);
+			return "F";
+		case "Ljava/lang/Double;":
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s2.posInQueue);
+			mv.insert(new CrodotMethod(Opcodes.INVOKEVIRTUAL, "java/lang/Double", "doubleValue", "()D", false), s1.posInQueue);
+			mv.visitInsn(Opcodes.DSUB);	
+			return "D";
+		default:
+			err.UnknownArithmeticInputException(line, TokenState.SUB, s1.type, s2.type);
+			return null;
+		}
+		
+		
+	}
+	
 	
 	
 	private String constWithGen(ASTNode tree) {
@@ -8104,7 +8963,7 @@ public class CodeCreator {
 				mv.visitInsn(Opcodes.IALOAD);
 				return "I";
 			case "[Z":
-				mv.visitInsn(Opcodes.IALOAD);
+				mv.visitInsn(Opcodes.BALOAD);
 				return "Z";
 			case "[B":
 				mv.visitInsn(Opcodes.BALOAD);
@@ -8131,12 +8990,44 @@ public class CodeCreator {
 		}
 		
 	}
+	
+	private String loadArr(String type) {
+		switch(type) {
+		case "[I":
+			mv.visitInsn(Opcodes.IALOAD);
+			return "I";
+		case "[Z":
+			mv.visitInsn(Opcodes.BALOAD);
+			return "Z";
+		case "[B":
+			mv.visitInsn(Opcodes.BALOAD);
+			return "B";
+		case "[S":
+			mv.visitInsn(Opcodes.SALOAD);
+			return "S";
+		case "[C":
+			mv.visitInsn(Opcodes.CALOAD);
+			return "C";
+		case "[D":
+			mv.visitInsn(Opcodes.DALOAD);
+			return "D";
+		case "[F":
+			mv.visitInsn(Opcodes.FALOAD);
+			return "F";
+		case "[J":
+			mv.visitInsn(Opcodes.LALOAD);
+			return "J";
+		default:
+			mv.visitInsn(Opcodes.AALOAD);
+			return type.replaceFirst("\\[", "");
+		}
+	}
 
 	private String initArray(ASTNode node) {
 		ASTNode temp = node;
 		int slack = -2;
 		String valType;
-		while (temp.type != TokenState.DECLARATION && temp.type != TokenState.DESCRIPTION) {
+		while (temp.type != TokenState.DECLARATION && temp.type != TokenState.DESCRIPTION)  {
 			temp = temp.prev;
 			slack += 2;
 		}
@@ -8209,47 +9100,199 @@ public class CodeCreator {
 	}
 	
 	private void IfconditionalE(ASTNode node, Label label) {
-		switch(node.type) {
-		case TokenState.BOOLEAN:
+		if (node.type == TokenState.BOOLEAN) {
 			if (node.value.equals("true")) {
 				mv.visitLdcInsn(1);
-			}
-			else {
+			} else {
 				mv.visitLdcInsn(0);
 			}
 			mv.visitJumpInsn(Opcodes.IFNE, label);
-			break;
+			return;
+		}
+		
+		evalE(node.GetFirstNode());
+		StackInfo s1 = curStack.pop();
+		evalE(node.GetNode(1));
+		StackInfo s2 = curStack.pop();
+		String fType;
+		if (s1.type.equals(s2.type)) {
+			fType = s1.type;
+		}
+		else {
+			fType = castBothTG(s1, s2);
+		}
+		switch(node.type) {
 		case TokenState.TRUEEQUALS:
-			evalE(node.GetFirstNode());
-			evalE(node.GetNode(1));
-			CNotEquals(label);
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPNE, label);
+				break;
+			case "J":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFNE, label);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFNE, label);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.DCMPL);
+				mv.visitJumpInsn(Opcodes.IFNE, label);
+				break;
+			default:
+				mv.visitJumpInsn(Opcodes.IF_ACMPNE, label);
+				break;
+			}
 			break;
 		case TokenState.NOTEQUALS:
-			evalE(node.GetFirstNode());
-			evalE(node.GetNode(1));
-			CTrueEquals(label);
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPEQ, label);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFEQ, label);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFEQ, label);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.DCMPL);
+				mv.visitJumpInsn(Opcodes.IFEQ, label);
+				break;
+			default:
+				mv.visitJumpInsn(Opcodes.IF_ACMPEQ, label);
+				break;
+			}
 			break;
 		case TokenState.TRUEGREATERTHAN:
-			evalE(node.GetFirstNode());
-			evalE(node.GetNode(1));
-			CLessThan(label);
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPLT, label);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFLT, label);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFLT, label);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.DCMPL);
+				mv.visitJumpInsn(Opcodes.IFLT, label);
+				break;
+			default:
+				//err
+			}
 			break;
 		case TokenState.TRUELESSTHAN:
-			evalE(node.GetFirstNode());
-			evalE(node.GetNode(1));
-			CGreaterThan(label);
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPGT, label);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFGT, label);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFGT, label);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.DCMPL);
+				mv.visitJumpInsn(Opcodes.IFGT, label);
+				break;
+			default:
+				//err
+			}
 			break;
 		case TokenState.GREATERTHAN:
-			evalE(node.GetFirstNode());
-			evalE(node.GetNode(1));
-			CTrueLessThan(label);
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPLE, label);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFLE, label);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFLE, label);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.DCMPL);
+				mv.visitJumpInsn(Opcodes.IFLE, label);
+				break;
+			default:
+				//err
+			}
 			break;
 		case TokenState.LESSTHAN:
-			evalE(node.GetFirstNode());
-			evalE(node.GetNode(1));
-			CTrueGreaterThan(label);
+			switch(fType) {
+			case "B", "S", "I", "C":
+				mv.visitJumpInsn(Opcodes.IF_ICMPGE, label);
+				break;
+			case "L":
+				mv.visitInsn(Opcodes.LCMP);
+				mv.visitJumpInsn(Opcodes.IFGE, label);
+				break;
+			case "F":
+				mv.visitInsn(Opcodes.FCMPL);
+				mv.visitJumpInsn(Opcodes.IFGE, label);
+				break;
+			case "D":
+				mv.visitInsn(Opcodes.DCMPL);
+				mv.visitJumpInsn(Opcodes.IFGE, label);
+				break;
+			default:
+				//err
+			}
 			break;
 		}
+		
+//		switch(node.type) {
+//		case TokenState.BOOLEAN:
+//			if (node.value.equals("true")) {
+//				mv.visitLdcInsn(1);
+//			}
+//			else {
+//				mv.visitLdcInsn(0);
+//			}
+//			mv.visitJumpInsn(Opcodes.IFNE, label);
+//			break;
+//		case TokenState.TRUEEQUALS:
+//			evalE(node.GetFirstNode());
+//			evalE(node.GetNode(1));
+//			CNotEquals(label);
+//			break;
+//		case TokenState.NOTEQUALS:
+//			evalE(node.GetFirstNode());
+//			evalE(node.GetNode(1));
+//			CTrueEquals(label);
+//			break;
+//		case TokenState.TRUEGREATERTHAN:
+//			evalE(node.GetFirstNode());
+//			evalE(node.GetNode(1));
+//			CLessThan(label);
+//			break;
+//		case TokenState.TRUELESSTHAN:
+//			evalE(node.GetFirstNode());
+//			evalE(node.GetNode(1));
+//			CGreaterThan(label);
+//			break;
+//		case TokenState.GREATERTHAN:
+//			evalE(node.GetFirstNode());
+//			evalE(node.GetNode(1));
+//			CTrueLessThan(label);
+//			break;
+//		case TokenState.LESSTHAN:
+//			evalE(node.GetFirstNode());
+//			evalE(node.GetNode(1));
+//			CTrueGreaterThan(label);
+//			break;
+//		}
 		
 	}
 
