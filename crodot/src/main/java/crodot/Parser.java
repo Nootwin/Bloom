@@ -242,9 +242,10 @@ public class Parser {
 			return tree;
 		}
 		for (int i = end; i > start; i--) {
-			
+			System.out.println(code.get(i).value);
 			if (brackets == 0) {
 				unit = po2.get(code.get(i).type);
+				
 				if (bestUnit == -1 || unit < bestUnit) {
 
 					
@@ -288,10 +289,10 @@ public class Parser {
 //					}
 //				}
 			}
-			if (code.get(i).type == TokenState.LEFTBRACKET || code.get(i).type == TokenState.LEFTBRACE || code.get(i).type == TokenState.LEFTGENERIC) {
+			if (code.get(i).type == TokenState.LEFTBRACKET || code.get(i).type == TokenState.LEFTBRACE || code.get(i).type == TokenState.LEFTGENERIC || code.get(i).type == TokenState.LEFTCAST) {
 				brackets--;
 			}
-			else if (code.get(i).type == TokenState.RIGHTBRACKET || code.get(i).type == TokenState.RIGHTBRACE || code.get(i).type == TokenState.RIGHTGENERIC) {
+			else if (code.get(i).type == TokenState.RIGHTBRACKET || code.get(i).type == TokenState.RIGHTBRACE || code.get(i).type == TokenState.RIGHTGENERIC || code.get(i).type == TokenState.RIGHTCAST) {
 				brackets++;
 			}
 		}
@@ -299,11 +300,15 @@ public class Parser {
 			code.get(place).type = TokenState.IDENTIFIER;
 		}
 		if (code.get(place).type == TokenState.IDENTIFIER) {
+			
 			if (code.get(place+1).type == TokenState.LEFTBRACKET) {
 				code.get(place).type = TokenState.FUN;
 			}
 			else if (code.get(place+1).type == TokenState.LEFTBRACE) {
 				code.get(place).type = TokenState.ARR;
+			}
+			else if (code.get(place+1).type == TokenState.LEFTCAST) {
+				code.get(place).type = TokenState.CAST;
 			}
 			else if (code.get(place+1).type == TokenState.LEFTGENERIC) {
 				code.get(place).type = TokenState.GENFUN;
@@ -311,9 +316,30 @@ public class Parser {
 			}
 		}
 		tree.type = code.get(place).type;
+		System.out.println("POSTSOLVE" + caller.TokenStateToString(code.get(place).type));
 		tree.value = code.get(place).value;
 		
 		switch (tree.type) {
+		case TokenState.CAST:
+			System.out.println("CAST" + code.get(place-1).value);
+			brackets = 0;
+			for (int i = place + 2; i < end + 1; i++) {
+				if (code.get(i).type == TokenState.LEFTCAST) {
+					brackets++;
+				}
+				else if (code.get(i).type == TokenState.RIGHTCAST) {
+					if (brackets == 0 ) {
+						tree.SetNode(postSolve(new ASTNode(tree, lineNum), place+1, i-1));
+						return tree;
+					}
+					else {
+						brackets--;
+					}
+					
+				}
+
+			}
+			return tree;
 		case TokenState.EQUIVALENCY:
 			tree.SetNode(preSolve(new ASTNode(tree, lineNum), start, place-1));
 			tree.SetNode(postSolve(new ASTNode(tree, lineNum), place, end));
@@ -501,6 +527,7 @@ public class Parser {
 	
 	
 	int decide(int p) {
+		System.out.println("DECIDE" + code.get(p).value);
 		switch(code.get(p).type) {
 		case TokenState.ACCDEF:
 			if (cur.prev.type == TokenState.DEFINITION) {
@@ -832,6 +859,9 @@ public class Parser {
 				}
 			}
 		case TokenState.ENDOFLINE:
+			if (code.get(p - 1).type == TokenState.RIGHTCURLY) {
+				return p + 1;
+			}
 			if (cur.type == TokenState.START && cur.value.equals(";")) {
 				cur.SetNode(new ASTNode(cur, TokenState.END, "}", lineNum));
 				cur = cur.prev.prev;

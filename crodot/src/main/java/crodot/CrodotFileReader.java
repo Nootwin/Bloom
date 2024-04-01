@@ -30,7 +30,7 @@ public class CrodotFileReader {
                 	if (line.length() > 0)	 {
                 		line2 = line.replaceAll("\\s+", "");
                 		switch(line2.charAt(line2.length()-1)) {
-                		case ';', '{', '}':
+                		case ';', '{':
                 			fileContent += line;
                 			break;
                 		default:

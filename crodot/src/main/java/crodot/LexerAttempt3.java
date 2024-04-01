@@ -15,6 +15,7 @@ public class LexerAttempt3 {
 	private LexerSpecials specials;
 	private ArrayList<Token> tokens;
 	private Stack<Integer> genCounter;
+	private Stack<Integer> castCount;
 	private ErrorThrower err;
 	private Queue<Integer> lineNum;
 	private int linePop;
@@ -27,6 +28,7 @@ public class LexerAttempt3 {
 		this.specials = new LexerSpecials();
 		this.tokens = new ArrayList<>(code.length() >> 1);
 		this.genCounter = new Stack<>();
+		this.castCount = new Stack<>();
 		this.linePop = 0;
 
 	}
@@ -37,6 +39,15 @@ public class LexerAttempt3 {
 			tokens.add(new Token(type = specials.get(value), value));
 			if (type == TokenState.LESSTHAN) {
 				genCounter.add(tokens.size()-1);
+			}
+			else if (type == TokenState.LEFTCURLY) {
+				castCount.add(tokens.size()-1);
+			}
+			else if (type == TokenState.RIGHTCURLY) {
+				if (!castCount.isEmpty()) {
+					tokens.get(castCount.pop()).type = TokenState.LEFTCAST;
+					tokens.get(tokens.size()-1).type = TokenState.RIGHTCAST;
+				}
 			}
 			else if (type == TokenState.GREATERTHAN) {
 				if (!genCounter.isEmpty()) {
@@ -330,6 +341,7 @@ public class LexerAttempt3 {
 				lineNum.poll();
 				linePop++;
 				tokens.add(new Token(TokenState.NEXTLINE, ""));
+				castCount.clear();
 			}
 			
 		}
