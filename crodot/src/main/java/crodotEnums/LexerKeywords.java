@@ -33,6 +33,7 @@ public class LexerKeywords {
 		s.put("proc", TokenState.ACCESS);
 		s.put("priv", TokenState.ACCESS);
 		s.put("static", TokenState.ACCESS);	
+		s.put("is", TokenState.IS);
 	}
 	
 	public boolean contains(String key) {

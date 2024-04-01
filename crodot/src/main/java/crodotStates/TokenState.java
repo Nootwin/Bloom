@@ -56,12 +56,15 @@ public class TokenState {
 	public static final byte LEFTCAST = 51;
 	public static final byte RIGHTCAST = 52;
 	public static final byte CAST = 53;
+	public static final byte IS = 54;
+	public static final byte NONE = 55;
 	
 	public static final byte INTEGER = 123;
 	public static final byte LONG = 124;
 	public static final byte DOUBLE = 125;
 	public static final byte NEXTLINE = 126;
 	public static final byte CODE = 127;
+	
 	
 	
 	

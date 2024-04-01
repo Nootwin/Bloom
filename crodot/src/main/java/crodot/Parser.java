@@ -29,26 +29,106 @@ public class Parser {
 	
 	//inclusive inclusive
 	ASTNode genericSolve(ASTNode tree, int start, int end) { 
-		if (end - start > 0) {
-			final int two = end-1;
-			
-			if (code.get(two).type == TokenState.CLASSMODIFIER) {
-				tree.SetNode(new ASTNode(tree, TokenState.CLASSMODIFIER, code.get(two).value, lineNum));
-				genericSolve(tree.GetFirstNode(), start, start);
-				genericSolve(tree.GetFirstNode(), end, end);
-				return tree;
+//		if (end - start > 0) {
+//			final int two = end-1;
+//			
+//			if (code.get(two).type == TokenState.CLASSMODIFIER) {
+//				tree.SetNode(new ASTNode(tree, TokenState.CLASSMODIFIER, code.get(two).value, lineNum));
+//				genericSolve(tree.GetFirstNode(), start, start);
+//				genericSolve(tree.GetFirstNode(), end, end);
+//				return tree;
+//			}
+//		}
+//		else if (end - start == 0) {
+//			if (code.get(start).type == TokenState.IDENTIFIER) {
+//				tree.SetNode(new ASTNode(tree, TokenState.CLASSNAME, code.get(start).value, lineNum));
+//			}
+//			else if (code.get(start).type == TokenState.INFERRED) {
+//				tree.SetNode(new ASTNode(tree, TokenState.CLASSNAME, "?", lineNum));
+//			}
+//			return tree;
+//		}
+		int low = start;
+		int high;
+		ASTNode temp;
+		int sizemin1;
+		int brack = 0;
+		for (int i = start; i < end+1; i++) {
+			System.out.println("GENERICOPFOFIOFOIFO   " + code.get(i).value + "   " + caller.TokenStateToString(code.get(i).type));
+			if (code.get(i).type == TokenState.LEFTGENERIC) {
+				brack++;
+			}
+			else if (code.get(i).type == TokenState.RIGHTGENERIC) {
+				brack--;
+			}
+			if (code.get(i).type == TokenState.SEPERATOR && brack == 0) {
+				high = i-1;
+				sizemin1 = high - low;
+				System.out.println(sizemin1 + "POWPOWPOW");
+				if (sizemin1 < 0) {
+
+				}
+				else if (code.get(low).type == TokenState.INFERRED) {
+					if (sizemin1 == 0) {
+						tree.SetNode(new ASTNode(tree, TokenState.INFERRED, "?", lineNum));
+					} 
+					else if (code.get(low+1).type == TokenState.CLASSMODIFIER) {
+						temp = new ASTNode(tree, TokenState.CLASSMODIFIER, code.get(low+1).value, lineNum);
+						tree.SetNode(temp);
+						temp.SetNode(new ASTNode(temp, TokenState.INFERRED,  "?", lineNum));
+						genericSolve(temp, low+2, high);
+					}
+					else {
+						//err
+						
+					}
+				}
+				else if (code.get(low).type == TokenState.IDENTIFIER) {
+					System.out.println("AMIHERE");
+					tree.SetNode(temp = new ASTNode(tree, TokenState.CLASSNAME, code.get(low).value, lineNum));
+					if (sizemin1 > 0) {
+						temp.SetNode(genericSolve(new ASTNode(temp, TokenState.GENERIC, "<>", lineNum), low+1, high-1));
+					}
+				} 
+				else {
+					//err.throwError("Invalid generic type", code.get(start).lineNum);
+					
+				}
+				low = i+1;
 			}
 		}
-		else if (end - start == 0) {
-			if (code.get(start).type == TokenState.IDENTIFIER) {
-				tree.SetNode(new ASTNode(tree, TokenState.CLASSNAME, code.get(start).value, lineNum));
-			}
-			else if (code.get(start).type == TokenState.INFERRED) {
-				tree.SetNode(new ASTNode(tree, TokenState.CLASSNAME, "?", lineNum));
-			}
+		sizemin1 = end - low;
+		System.out.println(sizemin1 + "FAKEGHOST");
+		if (sizemin1 < 0) {
 			return tree;
 		}
-		return null;
+		else if (code.get(low).type == TokenState.INFERRED) {
+			if (sizemin1 == 0) {
+				tree.SetNode(new ASTNode(tree, TokenState.INFERRED, "?", lineNum));
+			} 
+			else if (code.get(low+1).type == TokenState.CLASSMODIFIER) {
+				temp = new ASTNode(tree, TokenState.CLASSMODIFIER, code.get(low+1).value, lineNum);
+				tree.SetNode(temp);
+				temp.SetNode(new ASTNode(temp, TokenState.INFERRED,  "?", lineNum));
+				genericSolve(temp, low+2, end);
+			}
+			else {
+				//err
+				
+			}
+			
+		}
+		else if (code.get(low).type == TokenState.IDENTIFIER) {
+			tree.SetNode(temp = new ASTNode(tree, TokenState.CLASSNAME, code.get(low).value, lineNum));
+			if (sizemin1 > 0) {
+				temp.SetNode(genericSolve(new ASTNode(temp, TokenState.GENERIC, "<>", lineNum), low+2, end-1));
+			}
+		} 
+		else {
+			//err.throwError("Invalid generic type", code.get(start).lineNum);
+			
+		}
+		return tree;
 	}
 	
 	
@@ -237,8 +317,8 @@ public class Parser {
 		int bestUnit = -1;
 		brackets = 0;
 		if (end - start < 1) {
-			tree.type = TokenState.NULLVALUE;
-			tree.value = "null";
+			tree.type = TokenState.NONE;
+			tree.value = "";
 			return tree;
 		}
 		for (int i = end; i > start; i--) {
@@ -344,7 +424,7 @@ public class Parser {
 			tree.SetNode(preSolve(new ASTNode(tree, lineNum), start, place-1));
 			tree.SetNode(postSolve(new ASTNode(tree, lineNum), place, end));
 			return tree;
-		case TokenState.ADD, TokenState.SUB, TokenState.MUL, TokenState.DIV, TokenState.REM, TokenState.EXP, TokenState.SEPERATOR, TokenState.TRUEEQUALS, TokenState.NOTEQUALS, TokenState.TRUEGREATERTHAN, TokenState.TRUELESSTHAN, TokenState.GREATERTHAN, TokenState.LESSTHAN:
+		case TokenState.ADD, TokenState.SUB, TokenState.MUL, TokenState.DIV, TokenState.REM, TokenState.EXP, TokenState.SEPERATOR, TokenState.TRUEEQUALS, TokenState.NOTEQUALS, TokenState.TRUEGREATERTHAN, TokenState.TRUELESSTHAN, TokenState.GREATERTHAN, TokenState.LESSTHAN, TokenState.IS:
 			tree.SetNode(postSolve(new ASTNode(tree, lineNum), start, place-1));
 			tree.SetNode(postSolve(new ASTNode(tree, lineNum), place, end));
 			return tree;
@@ -413,13 +493,16 @@ public class Parser {
 			brackets = 0;
 			int dis=0;
 			for (int i = place+2; i < end+1; i++) {
+				System.out.println("GENERIC" + code.get(i).value);
 				if (code.get(i).type == TokenState.LEFTGENERIC) {
 					brackets++;
 				}
 				else if (code.get(i).type == TokenState.RIGHTGENERIC) {
 					if (brackets == 0) {	
 						tree.SetNode(genericSolve(new ASTNode(tree, TokenState.GENERIC, "<>", lineNum), place+2, i-1));
+						
 						dis = i;
+						break;
 					}
 					else {
 						brackets--;
@@ -428,6 +511,7 @@ public class Parser {
 				}
 				
 			}
+			System.out.println("GENERICDONE");
 			for (int i = dis+2; i < end+1; i++) {
 				if (code.get(i).type == TokenState.LEFTBRACKET) {
 					brackets++;
@@ -527,7 +611,7 @@ public class Parser {
 	
 	
 	int decide(int p) {
-		System.out.println("DECIDE" + code.get(p).value);
+		System.out.println("DECIDE" + code.get(p).value + "    " + caller.TokenStateToString(code.get(p).type));
 		switch(code.get(p).type) {
 		case TokenState.ACCDEF:
 			if (cur.prev.type == TokenState.DEFINITION) {
@@ -596,18 +680,23 @@ public class Parser {
 		case TokenState.DECLARATION:
 			int lev;
 			ASTNode node = null;
+			int brack = 0;
 			if (code.get(p+1).type == TokenState.LEFTGENERIC) {
 				node = new ASTNode(TokenState.GENERIC, "<>", lineNum);
 				lev = p+2;
 				for (int i = p+2; i < code.size(); i++) {
-					if (code.get(i).type == TokenState.SEPERATOR) {
-						node = genericSolve(node, lev, i-1);
-						lev = i;
+					if (code.get(i).type == TokenState.LEFTGENERIC) {
+						brack++;
 					}
 					else if (code.get(i).type == TokenState.RIGHTGENERIC) {
-						node = genericSolve(node, lev, i-1);
-						lev = i-p;
-						break;
+						if (brack == 0) {
+							node = genericSolve(node, lev, i-1);
+							lev = i-p;
+							break;
+						}
+						else {
+                            brack--;
+                        }
 					}
 				}
 			}
@@ -786,6 +875,7 @@ public class Parser {
 			}	
 		case TokenState.IDENTIFIER:
 
+
 			switch (cur.type) {
 			case TokenState.DECLARATION, TokenState.DEFINITION, TokenState.DESCRIPTION:
 				cur.SetNode(new ASTNode(cur, TokenState.IDENTIFIER, code.get(p).value, lineNum));
@@ -813,15 +903,24 @@ public class Parser {
 						cur = cur.GetLastNode();
 						
 						int genIndex = 0;
+						int genBrack = 0;
 						for (int i = decide(p)+1; i < code.size(); i++) {
+
 
 							switch(code.get(i).type) {
 							case TokenState.LEFTGENERIC:
 								genIndex = i+1;
+								genBrack++;
 								break;
 							case TokenState.RIGHTGENERIC:
-								cur.SetLast(genericSolve(new ASTNode(cur, TokenState.GENERIC, "<>", lineNum), genIndex, i-1));
-								genIndex = 0;
+								if (genBrack == 0) {
+									cur.SetLast(genericSolve(new ASTNode(cur, TokenState.GENERIC, "<>", lineNum), genIndex, i-1));
+									genIndex = 0;
+								}
+								else {
+									genBrack--;
+								}
+								
 								break;
 							case TokenState.RIGHTBRACKET:
 								while (cur.type != TokenState.DESCRIPTION) {
