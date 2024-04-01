@@ -104,6 +104,13 @@ public class CrodotMethodVisitor{
 	public void insert(CrodotCode code, int space) {
 		codes.add(space, code);
 	}
+
+	public void set(CrodotCode code, int space) {
+		codes.set(space, code);
+	}
+	public void add(CrodotCode code) {
+		codes.add(code);
+	}
 	public CrodotCode pop() {
 		return codes.removeLast();
 	}
@@ -111,6 +118,7 @@ public class CrodotMethodVisitor{
 	
 	public void apply() {
 		CrodotCode c;
+		debug();
 		while ((c = codes.poll()) != null) {
 
 			c.upload(mv);
@@ -122,7 +130,7 @@ public class CrodotMethodVisitor{
 	public void debug() {
 		System.out.println("START DEBUG");
 		for (CrodotCode c : codes) {
-			System.out.println(c.toString());
+			System.out.println("	" + c.toString());
 		}
 		System.out.println("END DEBUG");
 	}

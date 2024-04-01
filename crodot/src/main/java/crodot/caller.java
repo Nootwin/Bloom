@@ -24,7 +24,7 @@ public class caller {
 		for (int z = 0; z < n; z++) {
 			System.out.print('-');
 		}
-		System.out.println(tree.value);
+		System.out.println(TokenStateToString(tree.type));
 		for (ASTNode i : tree.next) {
 			indtree(i, n+1);
 		}
@@ -139,6 +139,7 @@ public class caller {
 		case TokenState.DOUBLE: return  "DOUBLE";
 		case TokenState.NEXTLINE: return "NEXTLINE";
 		case TokenState.CODE: return  "CODE";
+		case TokenState.IS: return  "IS";
 	}
 		return null;
 
@@ -188,8 +189,42 @@ public class caller {
 
 		AnaResults results = analy.start();
 
-		Generator gen = new Generator(parsed, results, err, name);
+		Generator gen = new Generator(parsed, results, err, analy, name);
 
+		gen.createSys(null);
+	}
+	
+	public static void multiFileCompileDebug(String FolderLocation, String mainLocation, String name, String outputLoc ) {
+		CrodotFileReader fileReader = new CrodotFileReader(FolderLocation + mainLocation);
+		String file = fileReader.ReadFileToString();
+		System.out.println(file);
+		
+		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList(), name, outputLoc);
+		
+		LexerAttempt3 lex2 = new LexerAttempt3(file, err);
+		ArrayList<Token> lexed = lex2.lex();
+		printoken(lexed);
+		
+		lex2 = null;
+		
+		System.out.println("############");
+		
+		Parser newparse = new Parser(lexed, err);
+		
+		lexed = null;
+		
+		ASTNode parsed = newparse.parse();
+		newparse = null;
+		indtree(parsed, 0);
+		
+		Analyser analy = new Analyser(parsed);
+		
+		AnaResults results = analy.start();
+		
+		//printhelpfulresults(results);
+		System.out.println("ANALY DONE");
+		Generator gen = new Generator(parsed, results, err, analy, name);
+		
 		gen.createSys(null);
 	}
 	
@@ -220,8 +255,9 @@ public class caller {
 		
 		AnaResults results = analy.start();
 		
-		printhelpfulresults(results);
-		Generator gen = new Generator(parsed, results, err, name);
+		//printhelpfulresults(results);
+		System.out.println("ANALY DONE");
+		Generator gen = new Generator(parsed, results, err, analy, name);
 		
 		gen.createSys(null);
 	}

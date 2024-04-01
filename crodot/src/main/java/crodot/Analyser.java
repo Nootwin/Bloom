@@ -665,7 +665,7 @@ public class Analyser {
 			//do stuff here
 		}
 	}
-	private void Import(String classID) {
+	public void Import(String classID) {
 		String nameHolder;
 		Class<?> id;
 		String name = classID.replace('.', '/');
@@ -798,8 +798,9 @@ public class Analyser {
 		ArgsList<String> list = new ArgsList<>();
 		boolean skip = false;
 		for (int i = 1; i < parent.GetNodeSize()-1; i++) {
+			System.out.println("GUN" + parent.GetNode(i).value);
 			switch(parent.GetNode(i).value) {
-			case ",":
+			case ",", "<>":
 				break;
 			case "str":
 				list.add("Ljava/lang/String;");
@@ -830,6 +831,7 @@ public class Analyser {
 				skip = true;
 				break;
 			default:
+				System.out.println("Should not be ehre");
 				if (skip) {
 					skip = false;
 				}
@@ -847,6 +849,7 @@ public class Analyser {
 					
 					// this is where you put the obj path when you build a obj finder
 				}
+				break;
 				
 			}
 			

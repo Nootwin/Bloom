@@ -12,5 +12,9 @@ public class CrodotLdc extends CrodotCode {
 	public void upload(MethodVisitor mv) {
 		mv.visitLdcInsn(value);
 	}
+
+	public String toString() {
+		return "LDC " + value;
+	}
 	
 }

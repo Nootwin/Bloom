@@ -17,6 +17,7 @@ public class PostOrder2 {
 		map.put(TokenState.TRUELESSTHAN, 2);
 		map.put(TokenState.GREATERTHAN, 2);
 		map.put(TokenState.LESSTHAN, 2);
+		map.put(TokenState.IS, 3);
 		map.put(TokenState.NOT, 3);
 		map.put(TokenState.ADD, 3);
 		map.put(TokenState.SUB, 3);

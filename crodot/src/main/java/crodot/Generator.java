@@ -7,6 +7,7 @@ import org.objectweb.asm.Opcodes;
 import crodotStates.TokenState;
 
 public class Generator {
+	private Analyser analy;
 	private ASTNode trees;
 	private CodeCreator create;
 	private boolean unClass = true;
@@ -17,10 +18,12 @@ public class Generator {
 	private ErrorThrower err;
 	private int line;
 	
-	Generator(ASTNode trees, AnaResults results, ErrorThrower err, String sourceFile) {
+	Generator(ASTNode trees, AnaResults results, ErrorThrower err, Analyser analy, String sourceFile) {
 		this.trees = trees;
 		this.err = err;
-		this.create = new CodeCreator(results, err, sourceFile);
+		this.analy = analy;
+		this.create = new CodeCreator(results, err, analy, sourceFile);
+		
 		line = -3;
 	}
 	
@@ -75,10 +78,13 @@ public class Generator {
 			create.evalE(tree);
 			break;
 		case TokenState.IDENTIFIER:
-
+			
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			lineCheck(tree);
-			if (tree.GetNodeSize() > 0) {
+			if (!indentObj.isEmpty() && indentObj.peek().equals("class")) {
+				create.newFieldUnkType(tree.value, Opcodes.ACC_PUBLIC, tree);
+			}
+			else if (tree.GetNodeSize() > 0) {
 				if (create.getVar(tree.value) != null) {
 					if (create.getVar(tree.value) instanceof GenVarInfo) {
 						create.curGenType = ((GenVarInfo) create.getVar(tree.value)).InferredTypes;
@@ -91,6 +97,8 @@ public class Generator {
 					create.evalE(tree.GetFirstNode());
 					create.newUnknownVar(tree.value);
 				}
+				
+				create.curGenType = null;
 				
 			}
 			else if (create.isClass(tree.value)) {
@@ -129,6 +137,8 @@ public class Generator {
 						
 					create.evalE(tree.GetNode(1), create.strToByte(tree.value));
 					create.newVar(tree.GetFirstNode().value, tree.value, tree.Grab(TokenState.GENERIC), tree.line);
+					
+					create.curGenType = null;
 				}
 				else {
 					create.uninitnewVar(tree.GetFirstNode().value, tree.value, tree.line);
@@ -211,10 +221,12 @@ public class Generator {
 			}
 			break;
 		case TokenState.RETURN:
+			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			lineCheck(tree);
 			create.Return(tree.GetFirstNode());
 			break;
 		case TokenState.END:
+			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			switch(indentObj.pop()) {
 			case "class":
 				unClass = create.closeClass();
