@@ -88,8 +88,8 @@ public class CodeCreator {
 	}
 	
 	public LinkedHashMap<String, String> createGenType(ASTNode gen, String name) {
-		String type = IfImport(name);
-		System.out.println(name);
+		String type = IfImport(name.replace("[]", ""));
+		System.out.println("]]]" + name.replace("[]", ""));
 		LinkedHashMap<String, String> map = new LinkedHashMap<>();;
 		ClassInfo info = results.Classes.get(type);
 		Iterator<String> keys = info.genType.keySet().iterator();
@@ -396,17 +396,27 @@ public class CodeCreator {
 	private ArrayList<String> getAllPossibleTypes(String str) {
 		String arrayPrefix;
 		String baseType;
-		if (str.startsWith("[")) {
-			int lastsqar = str.lastIndexOf('[');
-			arrayPrefix = str.substring(0, lastsqar);
-			baseType = str.substring(lastsqar);
+		String genericType;
+		int genStart = str.indexOf('<');
+		if (genStart > 0) {
+			genericType = str.substring(genStart);
+			baseType = str.substring(0, genStart) + ";";
+		} 
+		else {
+			genericType = "";
+			baseType = str;
+		}
+		
+		if (baseType.startsWith("[")) {
+			int lastsqar = baseType.lastIndexOf('[');
+			arrayPrefix = baseType.substring(0, lastsqar);
+			baseType = baseType.substring(lastsqar);
 		}
 		else {
 			arrayPrefix = "";
-			baseType = str;
 		}
 		ArrayList<String> list = new ArrayList<>();
-		list.add(str);
+		list.add(baseType);
 		switch(baseType) {
 		case "Z":
 			list.add(arrayPrefix + "Ljava/lang/Boolean;");
@@ -471,6 +481,16 @@ public class CodeCreator {
 			arrayPrefix = arrayPrefix.substring(1);
 			list.add(arrayPrefix + "Ljava/lang/Object;");
 		}
+		if (genStart > 0) {
+			ArrayList<String> nonGen = list;
+			list = new ArrayList<>();
+			for (String s : nonGen) {
+				list.add(s.substring(0, s.length()-1) + genericType);
+				list.add(s);
+			}
+		}
+		
+		
 		
 		return list;
 	}
@@ -1051,6 +1071,9 @@ public class CodeCreator {
 	
 	public String removeGenerics(String type) {
 		if (type.contains("<")) {
+			if (type.endsWith(")")) {
+				return type.substring(0, type.indexOf('<')) + ";)";
+			}
 			return type.substring(0, type.indexOf('<')) + ";";
 		}
 		return type;
@@ -9157,8 +9180,9 @@ public class CodeCreator {
 				flag = true;
 			}
 			if ((curGen = curGen.Grab(TokenState.GENERIC)) != null) {
+				System.out.println("GENGEBEN" + resultString);
 				b.deleteCharAt(b.length()-1);
-				b.append(typedGeneric(curGen, results.Classes.get(resultString).genType));
+				b.append(typedGeneric(curGen, results.Classes.get(stripToImport(resultString)).genType));
 				b.append(";");
 				flag = true;
 			}
@@ -9876,7 +9900,7 @@ public class CodeCreator {
 			}
 			String desc = removeGenerics(Methodinfo[0]) + removeGenerics(Methodinfo[1]);
 			if (Methodinfo[2].contains("static")) {
-				invokeStatic(tree.value, IfImport(top), Methodinfo[0] + Methodinfo[1]);	
+				invokeStatic(tree.value, IfImport(top), desc);	
 			}
 			else {
 				System.out.println(desc);

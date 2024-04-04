@@ -1,14 +1,7 @@
 import "java.util.ArrayList"
 
-class GenInput {
-	void test(ArrayList<Integer> i) {
-		
-	}
-}
+ArrayList<String>[] ii = [ArrayList<String>(), ArrayList<String>()]
 
-inp = GenInput()
-
-inp.test(ArrayList<Integer>())
 
 
 

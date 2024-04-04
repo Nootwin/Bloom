@@ -24,7 +24,7 @@ public class caller {
 		for (int z = 0; z < n; z++) {
 			System.out.print('-');
 		}
-		System.out.println(TokenStateToString(tree.type));
+		System.out.println(TokenStateToString(tree.type) + " " + tree.value);
 		for (ASTNode i : tree.next) {
 			indtree(i, n+1);
 		}
@@ -255,7 +255,7 @@ public class caller {
 		
 		AnaResults results = analy.start();
 		
-		//printhelpfulresults(results);
+		printhelpfulresults(results);
 		System.out.println("ANALY DONE");
 		Generator gen = new Generator(parsed, results, err, analy, name);
 		

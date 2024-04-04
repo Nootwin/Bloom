@@ -40,7 +40,14 @@ public class GenVarInfo extends VarInfo {
 	
 	
 	public GenVarInfo AddGenerics(ASTNode genNode, AnaResults results, String parentClass) {
-		ClassInfo info = results.Classes.get(type.substring(1, type.length()-1));
+		String classname = parentClass.replace("[]", ""); 
+
+		if (results.qNames.containsKey(classname)) {
+			System.out.println(classname + "KFIOEJFEI");
+			classname = results.qNames.get(classname);
+		}
+		System.out.println(classname);
+		ClassInfo info = results.Classes.get(classname);
 		Iterator<String> keys = info.genType.keySet().iterator();
 		for (int i = 0; i < info.genType.size(); i++) {
 			sig.setLength(0);
@@ -70,7 +77,10 @@ public class GenVarInfo extends VarInfo {
 	}
 	
 	public void nodeToString(ASTNode className, AnaResults results, String parentClass) {
-		if (results.Classes.get(parentClass).canGeneric() && results.Classes.get(parentClass).genType.containsKey(("T" + className.value + ";"))) {
+		String pClass = parentClass.replace("/", "");
+		pClass = pClass.substring(1, pClass.length()-1);
+		System.out.println(pClass);
+		if (results.Classes.get(pClass).canGeneric() && results.Classes.get(pClass).genType.containsKey(("T" + className.value + ";"))) {
 			sig.append("T");
 			sig.append(className.value);
 			sig.append(";");

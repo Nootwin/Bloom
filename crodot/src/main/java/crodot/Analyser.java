@@ -288,7 +288,7 @@ public class Analyser {
 		return r.toString();
 	}
 
-	public String strToByte(String str) {
+	private String strToByte(String str) {
 		if (str.contains("[")) {
 			StringBuilder build = new StringBuilder();
 			for (int i = 0; i < str.chars().filter(ch -> ch == '[').count(); i++) {
@@ -368,6 +368,34 @@ public class Analyser {
 			return results.qNames.get(type);
 		}
 		return type;
+	}
+	
+	private String genToString(ASTNode gen) {
+		StringBuilder b = new StringBuilder("<");
+		for (int i = 0; i < gen.GetNodeSize(); i++) {
+			switch(gen.GetNode(i).type) {
+			case TokenState.CLASSNAME:
+				b.append(strToByte(gen.GetNode(i).value));
+				break;
+			case TokenState.INFERRED:
+				b.append('*');
+				break;
+			case TokenState.CLASSMODIFIER:
+				if (gen.GetNode(i).value.equals("extends")) {
+					b.append('+');
+				}
+				else {
+					b.append('-');
+				}
+				b.append(strToByte(gen.GetNode(i).GetNode(1).value));
+				break;
+			case TokenState.GENERIC:
+				b.append(genToString(gen.GetNode(i)));
+				break;
+			}
+			
+		}
+		return b.append(">;").toString();
 	}
 	
 	
@@ -471,6 +499,7 @@ public class Analyser {
 			for (int i = 0; i < start.GetNodeSize(); i++) {
 				analyse1(start.GetNode(i));
 			}
+			curClass = "Main";
 
 			break;
 		case TokenState.ACCESS:
@@ -837,14 +866,28 @@ public class Analyser {
 				}
 				else {
 					skip = true;
-					if (results.Classes.get(curClass).genType.containsKey("T" + parent.GetNode(i).value + ";")) {
+					System.out.println(curClass);
+					if (results.Classes.get(curClass).canGeneric() && results.Classes.get(curClass).genType.containsKey("T" + parent.GetNode(i).value + ";")) {
 						list.add("T" + parent.GetNode(i).value + ';');
 					}
 					else if (parent.GetNode(i).value.contains("<")){
-						list.add(strToByteGeneric(parent.GetNode(i).value, null, results.Classes.get(curClass).genType));
+						if (parent.GetNode(i).Grab(TokenState.GENERIC) != null) {
+							String temp = strToByteGeneric(parent.GetNode(i).value, null, results.Classes.get(curClass).genType);
+							list.add(temp.substring(0, temp.length()-1) + genToString(parent.GetNode(i).Grab(TokenState.GENERIC)));
+						} 
+						else {
+							list.add(strToByteGeneric(parent.GetNode(i).value, null, results.Classes.get(curClass).genType));
+						}
+						
 					}
 					else {
-						list.add(strToByte(parent.GetNode(i).value));
+						if (parent.GetNode(i).Grab(TokenState.GENERIC) != null) {
+							String temp = strToByte(parent.GetNode(i).value);
+							list.add(temp.substring(0, temp.length()-1) + genToString(parent.GetNode(i).Grab(TokenState.GENERIC)));
+						} 
+						else {
+							list.add(strToByte(parent.GetNode(i).value));
+						}
 					}
 					
 					// this is where you put the obj path when you build a obj finder
