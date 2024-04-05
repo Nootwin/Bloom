@@ -135,7 +135,7 @@ public class Generator {
 						create.setCurGenType(tree.Grab(TokenState.GENERIC), tree.value);
 					}
 						
-					create.evalE(tree.GetNode(1), create.strToByte(tree.value));
+					create.evalE(tree.GetNode(1), create.strToByte(tree.value) + create.genToString(tree.Grab(TokenState.GENERIC)));
 					create.newVar(tree.GetFirstNode().value, tree.value, tree.Grab(TokenState.GENERIC), tree.line);
 					
 					create.curGenType = null;

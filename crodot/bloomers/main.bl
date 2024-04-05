@@ -1,6 +1,10 @@
 import "java.util.ArrayList"
 
-ArrayList<String>[] ii = [ArrayList<String>(), ArrayList<String>()]
+int x = 4
+
+xs = []
+
+
 
 
 

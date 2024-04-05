@@ -89,7 +89,6 @@ public class CodeCreator {
 	
 	public LinkedHashMap<String, String> createGenType(ASTNode gen, String name) {
 		String type = IfImport(name.replace("[]", ""));
-		System.out.println("]]]" + name.replace("[]", ""));
 		LinkedHashMap<String, String> map = new LinkedHashMap<>();;
 		ClassInfo info = results.Classes.get(type);
 		Iterator<String> keys = info.genType.keySet().iterator();
@@ -1826,7 +1825,7 @@ public class CodeCreator {
 				return;
 			}
 		default:
-			if (!targetStack.equals(curStack)) {
+			if (!targetStack.equals(removeGenerics(curStack))) {
 				mv.visitTypeInsn(Opcodes.CHECKCAST, stripToImport(targetStack));
 			}
 			break;
@@ -2849,10 +2848,12 @@ public class CodeCreator {
 			return stackTop();
 		case TokenState.GENFUN:
 			if (curGenType != null && node.Grab(TokenState.GENERIC).GetNodeSize() < 1) {
+
 				curStack.push(new StackInfo(constWithGen(node, curGenType), mv.size()));
 			}
 			else {
-				curStack.push(new StackInfo(constWithGen(node,createGenType(node.Grab(TokenState.GENERIC), node.value)), mv.size()));
+				
+				curStack.push(new StackInfo(constWithGen(node, createGenType(node.Grab(TokenState.GENERIC), node.value)), mv.size()));
 			}
 			return stackTop();
 		case TokenState.IDENTIFIER:
@@ -4724,6 +4725,7 @@ public class CodeCreator {
 				curStack.push(new StackInfo(constWithGen(node, curGenType), mv.size()));
 			}
 			else {
+				System.out.println("here?");
 				curStack.push(new StackInfo(constWithGen(node,createGenType(node.Grab(TokenState.GENERIC), node.value)), mv.size()));
 			}
 			
@@ -9026,7 +9028,7 @@ public class CodeCreator {
 	
 	private String constWithGen(ASTNode tree, LinkedHashMap<String, String> genTypeInfo) {
 		String type = IfImport(tree.value);
-		System.out.println(type);
+		//System.out.println(type);
 		int[] priority = null;
 		int[] tempPrio;
 		boolean flag;
@@ -9081,6 +9083,7 @@ public class CodeCreator {
 					}
 					else {
 						this.invokeSpecial("<init>", IfImport(tree.value), replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(type).genType) + "V");
+						//System.out.println("Hey + " + "L" + IfImport(tree.value) + genToString(tree.Grab(TokenState.GENERIC)));
 						return "L" + IfImport(tree.value) + genToString(tree.Grab(TokenState.GENERIC));
 					}
 					
@@ -9095,7 +9098,10 @@ public class CodeCreator {
 		return null;
 	}
 
-	private String genToString(ASTNode gen) {
+	String genToString(ASTNode gen) {
+		if (gen == null) {
+			return "";
+		}
 		StringBuilder b = new StringBuilder("<");
 		for (int i = 0; i < gen.GetNodeSize(); i++) {
 			switch(gen.GetNode(i).type) {
@@ -9427,17 +9433,26 @@ public class CodeCreator {
 				enCapCode = Opcodes.FASTORE;
 				break;
 			default:
-				System.out.println("hello?" + type);
-				mv.visitTypeInsn(Opcodes.ANEWARRAY, type);
+				if (type.startsWith("[")) {
+					mv.visitTypeInsn(Opcodes.ANEWARRAY, type);
+				} else {
+					mv.visitTypeInsn(Opcodes.ANEWARRAY, stripToImport(type));
+				}
 				enCapCode = Opcodes.AASTORE;
 				break;
 			}
-			
+			String typeStack;
 			for (int i = 0; i < node.GetNodeSize(); i++) {
 				mv.visitInsn(Opcodes.DUP);
 				mv.visitLdcInsn(i);
-				evalE(node.GetNode(i));
-				castTopStackForVar(type, popStack(), node.line);
+				evalE(node.GetNode(i), type);
+				typeStack = curStack.pop().type;
+				System.out.println(getAllPossibleTypes(typeStack));
+				System.out.println(type);
+				if (!getAllPossibleTypes(typeStack).contains(type)) {
+					err.IncompatibleTypeInArrayException(type, typeStack, node.line);
+                }
+				castTopStackForVar(type, typeStack, node.line);
 				mv.visitInsn(enCapCode);
 			}
 		}

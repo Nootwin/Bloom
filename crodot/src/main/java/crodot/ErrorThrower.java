@@ -125,8 +125,7 @@ public class ErrorThrower {
 
 	public void UnknownFieldTypeException(int lineNumber, String name, String classn) {
 		System.err.print("UnknownFieldTypeException");
-		System.err.print(": Field \"" + name + "\" in class \"" + classn + "\" is not given a type or a initial value");
-		System.err.println("\"");
+		System.err.println(": Field \"" + name + "\" in class \"" + classn + "\" is not given a type or a initial value");
 		System.err.println(fileContents.get(lineNumber));
 		System.err.println("Error at line " + lineNumber + " in: " + sourceFile);
 		System.exit(-1);
@@ -137,10 +136,20 @@ public class ErrorThrower {
 
 	public void AmbiguousAutoArrayTypeException(String name, int lineNumber) {
 		System.err.print("AmbiguousAutoArrayTypeException");
-		System.err.print(": Array \"" + name + "\" cannot generate an auto type due to conflicting input");
-		System.err.println("\"");
+		System.err.println(": Array \"" + name + "\" cannot generate an auto type due to conflicting input");
 		System.err.println(fileContents.get(lineNumber));
 		System.err.println("Error at line " + lineNumber + " in: " + sourceFile);
+		System.exit(-1);
+		
+	}
+
+
+
+	public void IncompatibleTypeInArrayException(String type, String typeStack, int line) {
+		System.err.print("IncompatibleTypeInArrayException");
+		System.err.println(": type \"" + typeStack + "\" is not compatible with array type \"" + type + "\"");
+		System.err.println(fileContents.get(line));
+		System.err.println("Error at line " + line + " in: " + sourceFile);
 		System.exit(-1);
 		
 	}

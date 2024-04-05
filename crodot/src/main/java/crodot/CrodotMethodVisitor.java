@@ -118,7 +118,7 @@ public class CrodotMethodVisitor{
 	
 	public void apply() {
 		CrodotCode c;
-		debug();
+		//debug();
 		while ((c = codes.poll()) != null) {
 
 			c.upload(mv);

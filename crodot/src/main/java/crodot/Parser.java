@@ -564,7 +564,9 @@ public class Parser {
 				}
 				
 			}
-			tree.SetNode(postSolve(new ASTNode(tree, lineNum), next, end-1));
+			if (next != end-1) {
+				tree.SetNode(postSolve(new ASTNode(tree, lineNum), next, end-1));
+			}
 			return tree;
 		case TokenState.ARR:
 			brackets = 0;
