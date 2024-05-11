@@ -957,6 +957,7 @@ public class CodeCreator {
 			}
 			
 			
+			System.out.println(i);
 			vars.add(parent.GetNode(i).GetFirstNode().value, new VarInfo(parent.GetNode(i).GetFirstNode().value, temp, vars.getLength()));
 			
 			
@@ -9186,9 +9187,10 @@ public class CodeCreator {
 				flag = true;
 			}
 			if ((curGen = curGen.Grab(TokenState.GENERIC)) != null) {
-				System.out.println("GENGEBEN" + resultString);
+				
 				b.deleteCharAt(b.length()-1);
-				b.append(typedGeneric(curGen, results.Classes.get(stripToImport(resultString)).genType));
+				System.out.println(stripToImport(resultString.replace("[", "")));
+				b.append(typedGeneric(curGen, results.Classes.get(stripToImport(resultString.replace("[", ""))).genType));
 				b.append(";");
 				flag = true;
 			}

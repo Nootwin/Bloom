@@ -729,11 +729,11 @@ public class Parser {
 						while (cur.type != TokenState.DESCRIPTION) {
 							cur = cur.prev;
 						}
-						if (code.get(i+1).type != TokenState.LEFTCURLY) {
-							
-							cur.SetLast(new ASTNode(cur, TokenState.START, ";", lineNum));
-							cur = cur.GetLastNode();
-						}
+//						if (code.get(i+1).type != TokenState.LEFTCURLY) {
+//							
+//							cur.SetLast(new ASTNode(cur, TokenState.START, ";", lineNum));
+//							cur = cur.GetLastNode();
+//						}
 						return i+1;
 					case TokenState.DECLARATION:
 						if (genIndex == 0) {

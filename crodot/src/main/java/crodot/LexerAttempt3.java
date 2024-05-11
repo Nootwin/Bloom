@@ -44,7 +44,7 @@ public class LexerAttempt3 {
 				castCount.add(tokens.size()-1);
 			}
 			else if (type == TokenState.RIGHTCURLY) {
-				if (!castCount.isEmpty()) {
+				if (!castCount.isEmpty() && castCount.peek() != tokens.size()-2) {
 					tokens.get(castCount.pop()).type = TokenState.LEFTCAST;
 					tokens.get(tokens.size()-1).type = TokenState.RIGHTCAST;
 				}

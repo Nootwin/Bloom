@@ -867,7 +867,7 @@ public class Analyser {
 				else {
 					skip = true;
 					System.out.println(curClass);
-					if (results.Classes.get(curClass).canGeneric() && results.Classes.get(curClass).genType.containsKey("T" + parent.GetNode(i).value + ";")) {
+					if (!curClass.equals("") && results.Classes.get(curClass).canGeneric() && results.Classes.get(curClass).genType.containsKey("T" + parent.GetNode(i).value + ";")) {
 						list.add("T" + parent.GetNode(i).value + ';');
 					}
 					else if (parent.GetNode(i).value.contains("<")){
