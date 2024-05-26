@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.Stack;
 import java.util.Map.Entry;
 
 import org.objectweb.asm.Opcodes;
@@ -21,7 +22,7 @@ import crodotStates.TokenState;
 
 public class Analyser {
 	private AnaResults results = new AnaResults();
-	private String curClass;
+	private Stack<String> curClass = new Stack<String>();
 	private ASTNode trees;
 	private String storage;
 	private ASTNode temp;
@@ -34,12 +35,24 @@ public class Analyser {
 		this.trees = trees;
 	}
 	
+	String setCurClass(String name) {
+		return curClass.push(name);
+	}
+
+	String getCurClass() {
+		return curClass.peek();
+	}
+
+	String popCurClass() {
+		return curClass.pop();
+	}
+	
 	public AnaResults start() {
 		results.Classes.put("Main", new ClassInfo());
 		results.Classes.get("Main").methods.put("main", new MethodInfo("main", "V"));
 		results.Classes.get("Main").methods.get("main").args.add(new ArgsList<String>());
 		results.Classes.get("Main").methods.get("main").args.getLast().add("[Ljava/lang/String;");
-		curClass = "";
+		setCurClass("Main");
 		accessPackage("java.lang");
 		Import("java.io.PrintStream");
 		
@@ -412,23 +425,26 @@ public class Analyser {
 			}
 			
 			break;
+		case TokenState.SUBDEFINITION:
+			
 		case TokenState.DEFINITION:
-			curClass = tree.GetFirstNode().value;
-			results.Classes.put(curClass, new ClassInfo());
+			popCurClass();
+			setCurClass(tree.GetFirstNode().value);
+			results.Classes.put(getCurClass(), new ClassInfo());
 			if (accAlr) {
 				if (privacy == 0) {
 					switch(tree.value) {
 					case "abstract":
-						results.Classes.get(curClass).AccessModifiers = "public abstract";
-						results.Classes.get(curClass).AccessOpcode = Opcodes.ACC_PUBLIC + Opcodes.ACC_ABSTRACT;
+						results.Classes.get(getCurClass()).AccessModifiers = "public abstract";
+						results.Classes.get(getCurClass()).AccessOpcode = Opcodes.ACC_PUBLIC + Opcodes.ACC_ABSTRACT;
 						break;
 					case "interface":
-						results.Classes.get(curClass).AccessModifiers = "public interface";
-						results.Classes.get(curClass).AccessOpcode = Opcodes.ACC_PUBLIC + Opcodes.ACC_INTERFACE + Opcodes.ACC_ABSTRACT;
+						results.Classes.get(getCurClass()).AccessModifiers = "public interface";
+						results.Classes.get(getCurClass()).AccessOpcode = Opcodes.ACC_PUBLIC + Opcodes.ACC_INTERFACE + Opcodes.ACC_ABSTRACT;
 						break;
 					default:
-						results.Classes.get(curClass).AccessModifiers = "public";
-						results.Classes.get(curClass).AccessOpcode = Opcodes.ACC_PUBLIC;
+						results.Classes.get(getCurClass()).AccessModifiers = "public";
+						results.Classes.get(getCurClass()).AccessOpcode = Opcodes.ACC_PUBLIC;
 						break;
 					}
 					
@@ -444,8 +460,8 @@ public class Analyser {
 						privacy += Opcodes.ACC_INTERFACE + Opcodes.ACC_ABSTRACT;
 						break;
 					}
-					results.Classes.get(curClass).AccessModifiers = privacyString.append("public").toString();
-					results.Classes.get(curClass).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
+					results.Classes.get(getCurClass()).AccessModifiers = privacyString.append("public").toString();
+					results.Classes.get(getCurClass()).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
 					
 					privacyString.setLength(0);
 					privacy = 0;
@@ -463,32 +479,32 @@ public class Analyser {
 					privacy += Opcodes.ACC_INTERFACE + Opcodes.ACC_ABSTRACT;
 					break;
 				}
-				results.Classes.get(curClass).AccessModifiers = privacyString.toString();
-				results.Classes.get(curClass).AccessOpcode = privacy;
+				results.Classes.get(getCurClass()).AccessModifiers = privacyString.toString();
+				results.Classes.get(getCurClass()).AccessOpcode = privacy;
 				
 				privacyString.setLength(0);
 				privacy = 0;
 				accAlr = true;
 			}
 			if ((temp = tree.Grab(TokenState.CLASSMODIFIER)) != null) {
-				results.Classes.get(curClass).parent = IfImport(temp.value);
+				results.Classes.get(getCurClass()).parent = IfImport(temp.value);
 			}
 			else {
-				results.Classes.get(curClass).parent = "java/lang/Object";
+				results.Classes.get(getCurClass()).parent = "java/lang/Object";
 			}
-			results.Classes.get(curClass).methods.put(curClass, new MethodInfo(curClass, "V"));
-			results.Classes.get(curClass).methods.get(curClass).args.add(new ArgsList<String>());
+			results.Classes.get(getCurClass()).methods.put(getCurClass(), new MethodInfo(getCurClass(), "V"));
+			results.Classes.get(getCurClass()).methods.get(getCurClass()).args.add(new ArgsList<String>());
 			if ((temp = tree.Grab(TokenState.GENERIC)) != null) {
-				results.Classes.get(curClass).willGeneric();
+				results.Classes.get(getCurClass()).willGeneric();
 				for (int i = 0; i < temp.GetNodeSize(); i++) {
 					System.out.println(temp.GetNode(i).type);
 					System.out.println(temp.GetNode(i).value);
 					switch(temp.GetNode(i).type) {
 					case TokenState.CLASSNAME:
-						results.Classes.get(curClass).genType.put("T" + temp.GetNode(i).value + ";", "Ljava/lang/Object;");
+						results.Classes.get(getCurClass()).genType.put("T" + temp.GetNode(i).value + ";", "Ljava/lang/Object;");
 						break;
 					case TokenState.CLASSMODIFIER:
-						results.Classes.get(curClass).genType.put(temp.GetNode(i).GetFirstNode().value, temp.GetNode(i).GetNode(1).value);
+						results.Classes.get(getCurClass()).genType.put(temp.GetNode(i).GetFirstNode().value, temp.GetNode(i).GetNode(1).value);
 						break;
 						
 					}
@@ -499,7 +515,8 @@ public class Analyser {
 			for (int i = 0; i < start.GetNodeSize(); i++) {
 				analyse1(start.GetNode(i));
 			}
-			curClass = "Main";
+			popCurClass();
+			setCurClass("Main");
 
 			break;
 		case TokenState.ACCESS:
@@ -553,7 +570,7 @@ public class Analyser {
 				break;
 		case TokenState.DESCRIPTION:
 			storage = tree.GetFirstNode().value;
-			if (curClass.equals("")) {
+			if (getCurClass().equals("Main")) {
 				results.Classes.get("Main").methods.put(storage, new MethodInfo(tree.GetFirstNode().value, strToByte(tree.value)));
 				results.Classes.get("Main").methods.get(storage).args.add(fromNodetoArg(tree));
 				
@@ -565,16 +582,16 @@ public class Analyser {
 				accAlr = true;
 				
 			}
-			else if (curClass.equals(tree.GetFirstNode().value)) {
-				results.Classes.get(curClass).methods.get(storage).args.add(fromNodetoArg(tree));
+			else if (getCurClass().equals(tree.GetFirstNode().value)) {
+				results.Classes.get(getCurClass()).methods.get(storage).args.add(fromNodetoArg(tree));
 				if (accAlr) {
 					if (privacy == 0) {
-						results.Classes.get(curClass).methods.get(storage).AccessModifiers = "public";
-						results.Classes.get(curClass).methods.get(storage).AccessOpcode = Opcodes.ACC_PUBLIC;
+						results.Classes.get(getCurClass()).methods.get(storage).AccessModifiers = "public";
+						results.Classes.get(getCurClass()).methods.get(storage).AccessOpcode = Opcodes.ACC_PUBLIC;
 					}
 					else {
-						results.Classes.get(curClass).methods.get(storage).AccessModifiers = privacyString.append("public").toString();
-						results.Classes.get(curClass).methods.get(storage).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
+						results.Classes.get(getCurClass()).methods.get(storage).AccessModifiers = privacyString.append("public").toString();
+						results.Classes.get(getCurClass()).methods.get(storage).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
 						
 						privacyString.setLength(0);
 						privacy = 0;
@@ -582,8 +599,8 @@ public class Analyser {
 					}
 				}
 				else {
-					results.Classes.get(curClass).methods.get(storage).AccessModifiers = privacyString.toString();
-					results.Classes.get(curClass).methods.get(storage).AccessOpcode = privacy;
+					results.Classes.get(getCurClass()).methods.get(storage).AccessModifiers = privacyString.toString();
+					results.Classes.get(getCurClass()).methods.get(storage).AccessOpcode = privacy;
 					
 					privacyString.setLength(0);
 					privacy = 0;
@@ -592,18 +609,18 @@ public class Analyser {
 				
 			}
 			else {
-				results.Classes.get(curClass).methods.put(storage, new MethodInfo(tree.GetFirstNode().value, strToByte(tree.value)));
-				results.Classes.get(curClass).methods.get(storage).args.add(fromNodetoArg(tree));
+				results.Classes.get(getCurClass()).methods.put(storage, new MethodInfo(tree.GetFirstNode().value, strToByte(tree.value)));
+				results.Classes.get(getCurClass()).methods.get(storage).args.add(fromNodetoArg(tree));
 				
 				if (accAlr) {
 					
 					if (privacy == 0) {
-						results.Classes.get(curClass).methods.get(storage).AccessModifiers = "public";
-						results.Classes.get(curClass).methods.get(storage).AccessOpcode = Opcodes.ACC_PUBLIC;
+						results.Classes.get(getCurClass()).methods.get(storage).AccessModifiers = "public";
+						results.Classes.get(getCurClass()).methods.get(storage).AccessOpcode = Opcodes.ACC_PUBLIC;
 					}
 					else {
-						results.Classes.get(curClass).methods.get(storage).AccessModifiers = privacyString.append("public").toString();
-						results.Classes.get(curClass).methods.get(storage).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
+						results.Classes.get(getCurClass()).methods.get(storage).AccessModifiers = privacyString.append("public").toString();
+						results.Classes.get(getCurClass()).methods.get(storage).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
 						
 						privacyString.setLength(0);
 						privacy = 0;
@@ -612,8 +629,8 @@ public class Analyser {
 				}
 				else {
 					System.out.println(privacyString.toString() + "    " + privacy + "    " + Opcodes.ACC_PRIVATE);
-					results.Classes.get(curClass).methods.get(storage).AccessModifiers = privacyString.toString();
-					results.Classes.get(curClass).methods.get(storage).AccessOpcode = privacy;
+					results.Classes.get(getCurClass()).methods.get(storage).AccessModifiers = privacyString.toString();
+					results.Classes.get(getCurClass()).methods.get(storage).AccessOpcode = privacy;
 					
 					privacyString.setLength(0);
 					privacy = 0;
@@ -622,22 +639,21 @@ public class Analyser {
 			}
 			break;
 		case TokenState.DECLARATION:
-			if (!curClass.isBlank()) {
 				String name = tree.GetFirstNode().value;
 				if (tree.GetNodeSize() > 1) {
-					results.Classes.get(curClass).fields.put(name, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), tree.GetNode(1)));
+					results.Classes.get(getCurClass()).fields.put(name, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), tree.GetNode(1)));
 				}
 				else {
-					results.Classes.get(curClass).fields.put(name, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), null));
+					results.Classes.get(getCurClass()).fields.put(name, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), null));
 				}
 				if (accAlr) {
 					if (privacy == 0) {
-						results.Classes.get(curClass).fields.get(name).AccessModifiers = "public";
-						results.Classes.get(curClass).fields.get(name).AccessOpcode = Opcodes.ACC_PUBLIC;
+						results.Classes.get(getCurClass()).fields.get(name).AccessModifiers = "public";
+						results.Classes.get(getCurClass()).fields.get(name).AccessOpcode = Opcodes.ACC_PUBLIC;
 					}
 					else {
-						results.Classes.get(curClass).fields.get(name).AccessModifiers = privacyString.append("public").toString();
-						results.Classes.get(curClass).fields.get(name).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
+						results.Classes.get(getCurClass()).fields.get(name).AccessModifiers = privacyString.append("public").toString();
+						results.Classes.get(getCurClass()).fields.get(name).AccessOpcode = privacy + Opcodes.ACC_PUBLIC;
 						
 						privacyString.setLength(0);
 						privacy = 0;
@@ -645,22 +661,15 @@ public class Analyser {
 					}
 				}
 				else {
-					results.Classes.get(curClass).fields.get(name).AccessModifiers = privacyString.toString();
-					results.Classes.get(curClass).fields.get(name).AccessOpcode = privacy;
+					results.Classes.get(getCurClass()).fields.get(name).AccessModifiers = privacyString.toString();
+					results.Classes.get(getCurClass()).fields.get(name).AccessOpcode = privacy;
 					
 					privacyString.setLength(0);
 					privacy = 0;
 					accAlr = true;
 				}
-			}
-			break;
-		case TokenState.END:
-			if (tree.prev.prev.type == TokenState.DEFINITION) {
-				curClass = "";
-			}
 			break;
 		}
-	
 		
 	}
 
@@ -866,17 +875,17 @@ public class Analyser {
 				}
 				else {
 					skip = true;
-					System.out.println(curClass);
-					if (!curClass.equals("") && results.Classes.get(curClass).canGeneric() && results.Classes.get(curClass).genType.containsKey("T" + parent.GetNode(i).value + ";")) {
+					System.out.println(getCurClass());
+					if (!getCurClass().equals("Main") && results.Classes.get(getCurClass()).canGeneric() && results.Classes.get(getCurClass()).genType.containsKey("T" + parent.GetNode(i).value + ";")) {
 						list.add("T" + parent.GetNode(i).value + ';');
 					}
 					else if (parent.GetNode(i).value.contains("<")){
 						if (parent.GetNode(i).Grab(TokenState.GENERIC) != null) {
-							String temp = strToByteGeneric(parent.GetNode(i).value, null, results.Classes.get(curClass).genType);
+							String temp = strToByteGeneric(parent.GetNode(i).value, null, results.Classes.get(getCurClass()).genType);
 							list.add(temp.substring(0, temp.length()-1) + genToString(parent.GetNode(i).Grab(TokenState.GENERIC)));
 						} 
 						else {
-							list.add(strToByteGeneric(parent.GetNode(i).value, null, results.Classes.get(curClass).genType));
+							list.add(strToByteGeneric(parent.GetNode(i).value, null, results.Classes.get(getCurClass()).genType));
 						}
 						
 					}

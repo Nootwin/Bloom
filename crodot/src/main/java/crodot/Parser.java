@@ -615,8 +615,14 @@ public class Parser {
 	int decide(int p) {
 		System.out.println("DECIDE" + code.get(p).value + "    " + caller.TokenStateToString(code.get(p).type));
 		switch(code.get(p).type) {
+		case TokenState.SUBDEFINITION:
+			cur.SetNode(new ASTNode(cur, TokenState.SUBDEFINITION, code.get(p).value, lineNum));
+			cur = cur.GetLastNode();
+			fieldCounter = 0;
+			return p+1;
+			
 		case TokenState.ACCDEF:
-			if (cur.prev.type == TokenState.DEFINITION) {
+			if (cur.prev.type == TokenState.DEFINITION || cur.prev.type == TokenState.SUBDEFINITION) {
 				code.get(p).type = TokenState.ACCESS;
 			}
 			else {
@@ -758,7 +764,7 @@ public class Parser {
 				}
 				
 			}
-			else if ((!Objects.isNull(cur.prev)) && cur.prev.type == TokenState.DEFINITION) {
+			else if ((!Objects.isNull(cur.prev)) && (cur.prev.type == TokenState.DEFINITION || cur.prev.type == TokenState.SUBDEFINITION)) {
 					cur.PlaceNode(new ASTNode(cur, TokenState.DECLARATION, code.get(p).value, lineNum), fieldCounter);
 					cur = cur.GetNode(fieldCounter);
 					if (lev > 0) {
@@ -879,7 +885,7 @@ public class Parser {
 
 
 			switch (cur.type) {
-			case TokenState.DECLARATION, TokenState.DEFINITION, TokenState.DESCRIPTION:
+			case TokenState.DECLARATION, TokenState.DEFINITION, TokenState.DESCRIPTION, TokenState.SUBDEFINITION:	
 				cur.SetNode(new ASTNode(cur, TokenState.IDENTIFIER, code.get(p).value, lineNum));
 
 				return p+1;
@@ -978,7 +984,7 @@ public class Parser {
 			}
 			return p+1;
 		case TokenState.LEFTCURLY:
-			if (!(cur.type == TokenState.LOOP || cur.type == TokenState.CONDITIONAL || cur.type == TokenState.DEFINITION || cur.type == TokenState.DESCRIPTION)) {
+			if (!(cur.type == TokenState.LOOP || cur.type == TokenState.CONDITIONAL || cur.type == TokenState.DEFINITION || cur.type == TokenState.DESCRIPTION || cur.type == TokenState.SUBDEFINITION || cur.type == TokenState.START || cur.type == TokenState.SUBDEFINITION)) {
 				cur = cur.prev;
 			}
 			cur.SetLast(new ASTNode(cur, TokenState.START, "{", lineNum));

@@ -140,6 +140,7 @@ public class caller {
 		case TokenState.NEXTLINE: return "NEXTLINE";
 		case TokenState.CODE: return  "CODE";
 		case TokenState.IS: return  "IS";
+		case TokenState.SUBDEFINITION: return  "SUBDEFINITION";
 	}
 		return null;
 

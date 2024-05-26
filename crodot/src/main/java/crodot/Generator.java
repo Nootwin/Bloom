@@ -120,6 +120,12 @@ public class Generator {
 				create.LoadArrIndex(create.loadVar(tree.value, tree), tree, 0);
 			}
 			break;
+		case TokenState.SUBDEFINITION:
+			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
+			lineCheck(tree);
+			create.newSubClass(tree);
+			indentObj.push("subclass");
+            break;
 		case TokenState.DECLARATION:
 
 			if (!indentObj.isEmpty() && indentObj.peek().equals("class")) {
