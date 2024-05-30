@@ -54,13 +54,13 @@ public class Analyser {
 		results.Classes.get("Main").methods.get("main").args.getLast().add("[Ljava/lang/String;");
 		setCurClass("Main");
 		accessPackage("java.lang");
-		Import("java.io.PrintStream");
+		addToResults("java.io.PrintStream");
 		
 		File dir = new File(System.getProperty("user.dir") + "\\");
 		File[] directoryListing = dir.listFiles();
 		for (File child : directoryListing) {
 			if (child.getName().endsWith(".class")) {
-				Import(child.getName().substring(0, child.getName().indexOf('.')));
+				addToResults(child.getName().substring(0, child.getName().indexOf('.')));
 			}
 		}
 		for (int i = 0; i < trees.GetNodeSize(); i++) {
@@ -421,7 +421,7 @@ public class Analyser {
 				
 			}
 			else {
-				Import(tree.GetFirstNode().value);
+				addToResults(tree.GetFirstNode().value);
 			}
 			
 			break;
@@ -685,7 +685,7 @@ public class Analyser {
 							BufferedReader read = new BufferedReader(new FileReader("javart\\" + file.getName()));
 							String line;
 							while((line = read.readLine()) != null) {
-								Import(shortname + "." + line);
+								addToResults(shortname + "." + line);
 							}
 							read.close();
 						}
@@ -703,115 +703,128 @@ public class Analyser {
 			//do stuff here
 		}
 	}
-	public void Import(String classID) {
-		String nameHolder;
-		Class<?> id;
+	
+	public void addToResults(String classID) {
 		String name = classID.replace('.', '/');
+		Class<?> id = getClassObject(classID);
+		
+		results.qNames.put(id.getSimpleName(), name);
 		if (results.Classes.containsKey(name)) {
 			return;
 		}
+		
+		Import(name, id);
+		
+	}
+	public Class<?> getClassObject(String classID) {
 		try {
-			id = Class.forName(classID);
+			return Class.forName(classID);
 		} catch (ClassNotFoundException e1) {
 			// TODO Auto-generated catch block
-			id = fetcher.fetchNonJava(System.getProperty("user.dir") + "\\" + classID + ".class", classID);
+			return fetcher.fetchNonJava(System.getProperty("user.dir") + "\\" + classID + ".class", classID);
 		}
-			ArgsList<String> args = new ArgsList<>();
+	}
+	
+	public ClassInfo Import(String name, Class<?> id) {
+		String nameHolder;
+		ArgsList<String> args = new ArgsList<>();
 			
-			results.qNames.put(id.getSimpleName(), name);
+		HashMap<String, String> genTypeMethod = null;
+		ClassInfo info = new ClassInfo();
 			
-			HashMap<String, String> genTypeMethod = null;
-			ClassInfo info;
-			
-			
-			results.Classes.put(name, info = new ClassInfo());
-			
-			for (TypeVariable<?> type : id.getTypeParameters()) {
-				if (!info.canGeneric()) {
-					info.willGeneric();
-				}
-				info.genType.put("T" + type.getName() + ";", "L" + type.getBounds()[0].getTypeName().replace(".", "/") + ";");
+		for (TypeVariable<?> type : id.getTypeParameters()) {
+			if (!info.canGeneric()) {
+				info.willGeneric();
+			}
+			info.genType.put("T" + type.getName() + ";", "L" + type.getBounds()[0].getTypeName().replace(".", "/") + ";");
 
+		}
+		for (Method m : id.getMethods()) {
+			for (TypeVariable<?> type : m.getTypeParameters()) {
+				if (genTypeMethod == null) {
+					genTypeMethod = new HashMap<>();
+				}
+				genTypeMethod.put(type.getName(), type.getBounds()[0].getTypeName().replace(".", "/"));
 			}
-			for (Method m : id.getMethods()) {
-				for (TypeVariable<?> type : m.getTypeParameters()) {
-					if (genTypeMethod == null) {
-						genTypeMethod = new HashMap<>();
-					}
-					genTypeMethod.put(type.getName(), type.getBounds()[0].getTypeName().replace(".", "/"));
-				}
 				
-				if (!info.methods.containsKey(m.getName())) {
-					info.methods.put(m.getName(), new MethodInfo(m.getName()));
-					info.methods.get(m.getName()).AccessModifiers = Modifier.toString(m.getModifiers());
-				}
+			if (!info.methods.containsKey(m.getName())) {
+				info.methods.put(m.getName(), new MethodInfo(m.getName()));
+				info.methods.get(m.getName()).AccessModifiers = Modifier.toString(m.getModifiers());
+			}
 				
-				for (Parameter p : m.getParameters()) {
-					nameHolder = p.getParameterizedType().getTypeName();
-					if (nameHolder.contains("<")) {
-						args.add(strToByteGeneric(nameHolder, genTypeMethod, info.genType));
-					}
-					else if (genTypeMethod != null && genTypeMethod.containsKey(nameHolder)) {
-						System.out.println("IAMTHEONE");
-						args.add(genTypeMethod.get("L" + nameHolder + ";"));
-					}
-					else if (info.canGeneric() && info.genType.containsKey("T" + nameHolder + ";")) {
-						args.add("T" + nameHolder + ";");
-					}
-					else {
-						args.add(strToBytePlus(nameHolder.replace('.', '/')));
-					}
+			for (Parameter p : m.getParameters()) {
+				nameHolder = p.getParameterizedType().getTypeName();
+				if (nameHolder.contains("<")) {
+					args.add(strToByteGeneric(nameHolder, genTypeMethod, info.genType));
 				}
+				else if (genTypeMethod != null && genTypeMethod.containsKey(nameHolder)) {
+					System.out.println("IAMTHEONE");
+					args.add(genTypeMethod.get("L" + nameHolder + ";"));
+				}
+				else if (info.canGeneric() && info.genType.containsKey("T" + nameHolder + ";")) {
+					args.add("T" + nameHolder + ";");
+				}
+				else {
+					args.add(strToBytePlus(nameHolder.replace('.', '/')));
+				}
+			}
 				
-				if (!info.methods.get(m.getName()).args.contains(args)) {
-					info.methods.get(m.getName()).args.add(args);
-					nameHolder = m.getGenericReturnType().getTypeName();
-					if (nameHolder.contains("<")) {
-						info.methods.get(m.getName()).returnType.add(strToByteGeneric(nameHolder, genTypeMethod, info.genType));
-					}
-					else if (genTypeMethod != null && genTypeMethod.containsKey(nameHolder.replace("[]", ""))) {
-						info.methods.get(m.getName()).returnType.add(strToByte(genTypeMethod.get(nameHolder.replace("[]", ""))));
-					}
-					else if (info.canGeneric() && info.genType.containsKey("T" + nameHolder.replace("[]", "") + ";")) {
-						info.methods.get(m.getName()).returnType.add("T" + moveBrackets(nameHolder) + ";");
-					}
-					else {
-						info.methods.get(m.getName()).returnType.add(strToBytePlus(nameHolder.replace('.', '/')));
-					}
+			if (!info.methods.get(m.getName()).args.contains(args)) {
+				info.methods.get(m.getName()).args.add(args);
+				nameHolder = m.getGenericReturnType().getTypeName();
+				if (nameHolder.contains("<")) {
+					info.methods.get(m.getName()).returnType.add(strToByteGeneric(nameHolder, genTypeMethod, info.genType));
 				}
+				else if (genTypeMethod != null && genTypeMethod.containsKey(nameHolder.replace("[]", ""))) {
+					info.methods.get(m.getName()).returnType.add(strToByte(genTypeMethod.get(nameHolder.replace("[]", ""))));
+				}
+				else if (info.canGeneric() && info.genType.containsKey("T" + nameHolder.replace("[]", "") + ";")) {
+					info.methods.get(m.getName()).returnType.add("T" + moveBrackets(nameHolder) + ";");
+				}
+				else {
+					info.methods.get(m.getName()).returnType.add(strToBytePlus(nameHolder.replace('.', '/')));
+				}
+			}
 
-				args = new ArgsList<>();
-				genTypeMethod = null;
-			}
-			for (Constructor<?> c : id.getConstructors()) {
-				if (!info.methods.containsKey(name)) {
-					info.methods.put(name, new MethodInfo(c.getName(), "V"));
-					info.methods.get(name).AccessModifiers = Modifier.toString(c.getModifiers());
-				}	
-				for (Parameter p : c.getParameters()) {
-					nameHolder = p.getParameterizedType().getTypeName();
-					if (nameHolder.contains("<")) {
-						args.add(strToByteGeneric(nameHolder, genTypeMethod, info.genType));
-					}
-					else if (genTypeMethod != null && genTypeMethod.containsKey(nameHolder)) {
-						System.out.println("IAMTHEONE");
-						args.add(genTypeMethod.get("L" + nameHolder + ";"));
-					}
-					else if (info.canGeneric() && info.genType.containsKey("T" + nameHolder + ";")) {
-						args.add("T" + nameHolder + ";");
-					}
-					else {
-						args.add(strToBytePlus(nameHolder.replace('.', '/')));
-					}
-					
-				}
-				info.methods.get(name).args.add(args);
-				args = new ArgsList<>();
-			}
-			for (Field f : id.getFields()) {
-				info.fields.put(f.getName(), new FieldInfo(f.getName(), strToByte(f.getGenericType().getTypeName())));
-				info.fields.get(f.getName()).AccessModifiers = Modifier.toString(f.getModifiers());
+			args = new ArgsList<>();
+			genTypeMethod = null;
+		}
+		for (Constructor<?> c : id.getConstructors()) {
+			if (!info.methods.containsKey(name)) {
+				info.methods.put(name, new MethodInfo(c.getName(), "V"));
+				info.methods.get(name).AccessModifiers = Modifier.toString(c.getModifiers());
 			}	
+			for (Parameter p : c.getParameters()) {
+				nameHolder = p.getParameterizedType().getTypeName();
+				if (nameHolder.contains("<")) {
+					args.add(strToByteGeneric(nameHolder, genTypeMethod, info.genType));
+				}
+				else if (genTypeMethod != null && genTypeMethod.containsKey(nameHolder)) {
+					System.out.println("IAMTHEONE");
+					args.add(genTypeMethod.get("L" + nameHolder + ";"));
+				}
+				else if (info.canGeneric() && info.genType.containsKey("T" + nameHolder + ";")) {
+					args.add("T" + nameHolder + ";");
+				}
+				else {
+					args.add(strToBytePlus(nameHolder.replace('.', '/')));
+				}
+					
+			}
+			info.methods.get(name).args.add(args);
+			args = new ArgsList<>();
+		}
+		for (Field f : id.getFields()) {
+			info.fields.put(f.getName(), new FieldInfo(f.getName(), strToByte(f.getGenericType().getTypeName())));
+			info.fields.get(f.getName()).AccessModifiers = Modifier.toString(f.getModifiers());
+		}	
+		for (Class<?> c : id.getClasses()) {
+			String name2 = c.getName().replace('.', '/');
+			info.localSubClassNames.put(c.getSimpleName(), name2);
+			info.subClasses.put(name2, Import(name2, c));
+		}
+			
+		return info;
 
 		
 		

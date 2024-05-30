@@ -35,7 +35,6 @@ public class CodeCreator {
 	private ClassCreator OtherClass;
 	private String returnType;
 	private ClassCreator cc;
-	private ClassInfo curClass;
 	public CrodotMethodVisitor mv;
 	private ClassCreator MainClass;
 	private CrodotMethodVisitor MainMethod;
@@ -665,7 +664,7 @@ public class CodeCreator {
 	public boolean newClass(ASTNode classnode) {
 		OtherClass = new ClassCreator(classnode.GetFirstNode().value, classnode.GetFirstNode().value, results.Classes.get(classnode.GetFirstNode().value));
 		setCurName(classnode.GetFirstNode().value);
-		curClass = results.Classes.get(getCurName());
+		results.Classes.get(getCurName());
 		cc = OtherClass;
 		ASTNode temp = classnode;
 		if ((temp = classnode.Grab(TokenState.CLASSMODIFIER)) != null) {
@@ -859,7 +858,7 @@ public class CodeCreator {
 			OtherClass = cc;
 			cc = MainClass;
 			setCurName("Main");
-			curClass = results.Classes.get("Main");
+			results.Classes.get("Main");
 		
 			if (method) {
 				mv =  MainMethod;

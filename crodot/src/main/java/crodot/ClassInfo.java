@@ -15,6 +15,7 @@ public class ClassInfo {
 	HashMap<String, MethodInfo> methods;
 	HashMap<String, FieldInfo> fields;
 	HashMap<String, ClassInfo> subClasses;
+	HashMap<String, String> localSubClassNames;
 	LinkedHashMap<String, String> genType;
 	
 	
@@ -23,6 +24,8 @@ public class ClassInfo {
 		construct = false;
 		methods = new HashMap<>();
 		fields = new HashMap<>();
+		subClasses = new HashMap<>();
+		localSubClassNames = new HashMap<>();
 	}
 	
 	public void willGeneric() {
