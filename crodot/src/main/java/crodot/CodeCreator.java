@@ -15,10 +15,8 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Stack;
 
-import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Label;
-import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 import crodotInsn.CrodotIInc;
@@ -34,11 +32,12 @@ import javassist.bytecode.Opcode;
 public class CodeCreator {
 	private String sourceFile;
 	private Stack<String> curName;
+	private ClassCreator OtherClass;
 	private String returnType;
-	private ClassWriter cw;
+	private ClassCreator cc;
+	private ClassInfo curClass;
 	public CrodotMethodVisitor mv;
-	private ClassWriter OtherClass;
-	private ClassWriter MainClass;
+	private ClassCreator MainClass;
 	private CrodotMethodVisitor MainMethod;
 	private Stack<Label> labelList;
 	private String top;
@@ -67,11 +66,11 @@ public class CodeCreator {
 		this.analy = analy;
 		this.curName = new Stack<>();
 		
-		MainClass = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
-		MainClass.visit(Opcodes.V19, Opcodes.ACC_PUBLIC, "Main", null, "java/lang/Object", null);
-		MainClass.visitSource(sourceFile, null);
+		MainClass = new ClassCreator("Main", "Main", results.Classes.get("Main"));
+		MainClass.cw.visit(Opcodes.V19, Opcodes.ACC_PUBLIC, "Main", null, "java/lang/Object", null);
+		MainClass.cw.visitSource(sourceFile, null);
 		
-		MainMethod = new CrodotMethodVisitor(MainClass.visitMethod(Opcodes.ACC_PUBLIC + Opcodes.ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null));
+		MainMethod = new CrodotMethodVisitor(MainClass.cw.visitMethod(Opcodes.ACC_PUBLIC + Opcodes.ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null));
 //		varPos.set(0, new HashMap<>());
 //		varPos.get(0).put("args", new VarInfo("args", "str", 0));
 		vars.addMain("args",  new VarInfo("args", "str", 0));
@@ -80,9 +79,14 @@ public class CodeCreator {
 		labelList = new Stack<>();
 	}
 	
+	public ClassWriter getCW() {
+		return cc.cw;
+	}
+	
 	public String getCurName() {
 		return curName.peek();
 	}
+	
 	
 	public void setCurGenType(ASTNode gen, String name) {
 		if (gen == null) {
@@ -97,7 +101,6 @@ public class CodeCreator {
 		LinkedHashMap<String, String> map = new LinkedHashMap<>();;
 		ClassInfo info = results.Classes.get(type);
 		Iterator<String> keys = info.genType.keySet().iterator();
-		StringBuilder sig = new StringBuilder();
 		//why getting called
 		for (int i = 0; i < info.genType.size(); i++) {
 			map.put(keys.next(), nodeToString(gen.GetNode(i), info));
@@ -194,13 +197,13 @@ public class CodeCreator {
 			if (priority != null) {
 				addCastings(info.args.get(priority[0]), stacks);
 				String ret;
-				if (results.Classes.get(curName).canGeneric()) {
-					ret = replaceReturn(info.returnType.get(priority[0]), results.Classes.get(curName).genType);
+				if (results.Classes.get(getCurName()).canGeneric()) {
+					ret = replaceReturn(info.returnType.get(priority[0]), results.Classes.get(getCurName()).genType);
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
 						analy.Import(ImportFormat(ret));
 					}
 					
-					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(curName).genType), ret, info.AccessModifiers};
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(getCurName()).genType), ret, info.AccessModifiers};
 				}
 				else {
 					ret = info.returnType.get(priority[0]);
@@ -660,29 +663,30 @@ public class CodeCreator {
 	}
 	
 	public boolean newClass(ASTNode classnode) {
-		OtherClass = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
+		OtherClass = new ClassCreator(classnode.GetFirstNode().value, classnode.GetFirstNode().value, results.Classes.get(classnode.GetFirstNode().value));
 		setCurName(classnode.GetFirstNode().value);
-		cw = OtherClass;
+		curClass = results.Classes.get(getCurName());
+		cc = OtherClass;
 		ASTNode temp = classnode;
 		if ((temp = classnode.Grab(TokenState.CLASSMODIFIER)) != null) {
-			cw.visit(Opcodes.V19, results.Classes.get(getCurName()).AccessOpcode, getCurName(), signatureWriterClass(classnode), IfImport(temp.value), null);
+			cc.cw.visit(Opcodes.V19, results.Classes.get(getCurName()).AccessOpcode, getCurName(), signatureWriterClass(classnode), IfImport(temp.value), null);
 		}
 		else {
-			cw.visit(Opcodes.V19, results.Classes.get(getCurName()).AccessOpcode, getCurName(), signatureWriterClass(classnode), "java/lang/Object", null);
+			cc.cw.visit(Opcodes.V19, results.Classes.get(getCurName()).AccessOpcode, getCurName(), signatureWriterClass(classnode), "java/lang/Object", null);
 		}
 		
-		cw.visitSource(sourceFile, null);
+		cc.cw.visitSource(sourceFile, null);
 		return false;
 	}
 	
 	public boolean closeClass() {
 		if (!results.Classes.get(getCurName()).construct) {
-			mv = new CrodotMethodVisitor(cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null));
+			mv = new CrodotMethodVisitor(cc.cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null));
 			addDefaultstoConst(getCurName());
 			returnType = "V";
 			closeMethod();
 		}
-		cw.visitEnd();
+		cc.cw.visitEnd();
 
 		return true;
 	}
@@ -710,14 +714,14 @@ public class CodeCreator {
 		}
 		ArgsList<String> args = fromNodetoArg(tree);
 		if (methodName.equals(getCurName())) {
-			mv = new CrodotMethodVisitor(cw.visitMethod(results.Classes.get(getCurName()).methods.get(methodName).AccessOpcode, "<init>", args.toArgs() + "V", signature, null));
+			mv = new CrodotMethodVisitor(cc.cw.visitMethod(results.Classes.get(getCurName()).methods.get(methodName).AccessOpcode, "<init>", args.toArgs() + "V", signature, null));
 			addDefaultstoConst(getCurName());
 			results.Classes.get(getCurName()).construct = true;
 			this.returnType = "V";
 		}
 		else {
 			System.out.println("RIRIRI" + args.toArgs());
-			mv = new CrodotMethodVisitor(cw.visitMethod(results.Classes.get(getCurName()).methods.get(methodName).AccessOpcode, methodName,  args.toArgs() + returnType, signature, null));
+			mv = new CrodotMethodVisitor(cc.cw.visitMethod(results.Classes.get(getCurName()).methods.get(methodName).AccessOpcode, methodName,  args.toArgs() + returnType, signature, null));
 		}
 		
 		labelList = new Stack<>();
@@ -852,9 +856,10 @@ public class CodeCreator {
 	
 	public boolean accMain(boolean classM, boolean method, boolean If) {
 		if (classM) {
-			OtherClass = cw;
-			cw = MainClass;
+			OtherClass = cc;
+			cc = MainClass;
 			setCurName("Main");
+			curClass = results.Classes.get("Main");
 		
 			if (method) {
 				mv =  MainMethod;
@@ -990,11 +995,11 @@ public class CodeCreator {
 			
 		}
 		if (!Objects.isNull(MainClass)) {
-			MainClass.visitEnd();
+			MainClass.cw.visitEnd();
 		}
 	}
 	public void newField(String name, String type, int Access, ASTNode node) {
-		cw.visitField(Access, name, strToByte(type), signatureWriterField(node), null).visitEnd();
+		cc.cw.visitField(Access, name, strToByte(type), signatureWriterField(node), null).visitEnd();
 		
 	}
 	public void newFieldUnkType(String name, int Access, ASTNode node) {
@@ -10044,7 +10049,7 @@ public class CodeCreator {
 		try {
 			if (!Objects.isNull(MainClass)) {
 				out = new FileOutputStream("Main.class");
-				out.write(MainClass.toByteArray());
+				out.write(MainClass.cw.toByteArray());
 				out.close();
 			}
 		} catch (FileNotFoundException e) {
@@ -10059,7 +10064,7 @@ public class CodeCreator {
 		FileOutputStream out;
 		try {
 			out = new FileOutputStream(getCurName() + ".class");
-			out.write(cw.toByteArray());
+			out.write(cc.cw.toByteArray());
 			out.close();
 		} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block
@@ -10320,7 +10325,16 @@ public class CodeCreator {
 
 	public void newSubClass(ASTNode tree) {
 		String name = tree.GetFirstNode().value;
-		String parent = getCurName();
+		String fullname = cc.internalName + "$" + name;
+		cc = new ClassCreator(fullname, cc.internalName, cc.classInfo.subClasses.get(name), cc);
+		
+		
+	}
+	
+	public void endSubClass() {
+		cc.cw.visitEnd();
+		saveClass();
+		cc = cc.outer;
 		
 	}
 

@@ -8,12 +8,15 @@ import java.util.Set;
 
 public class ClassInfo {
 	String parent;
+	ClassInfo outerClass;
 	boolean construct;
 	int AccessOpcode;
 	String AccessModifiers;
 	HashMap<String, MethodInfo> methods;
 	HashMap<String, FieldInfo> fields;
+	HashMap<String, ClassInfo> subClasses;
 	LinkedHashMap<String, String> genType;
+	
 	
 	
 	ClassInfo() {
