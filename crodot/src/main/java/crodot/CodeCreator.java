@@ -31,10 +31,9 @@ import javassist.bytecode.Opcode;
 
 public class CodeCreator {
 	private String sourceFile;
-	private Stack<String> curName;
 	private ClassCreator OtherClass;
 	private String returnType;
-	private ClassCreator cc;
+	ClassCreator cc;
 	public CrodotMethodVisitor mv;
 	private ClassCreator MainClass;
 	private CrodotMethodVisitor MainMethod;
@@ -47,7 +46,6 @@ public class CodeCreator {
 	AnaResults results;
 	private ArrayList<Integer> getAllRangeStackPos;
 	private VariableManager vars;
-	LinkedHashMap<String, String> curGenType;
 	private Analyser analy;
 	
 	
@@ -63,7 +61,6 @@ public class CodeCreator {
 		this.err = err;
 		this.sourceFile = sourceFile;
 		this.analy = analy;
-		this.curName = new Stack<>();
 		
 		MainClass = new ClassCreator("Main", "Main", results.Classes.get("Main"));
 		MainClass.cw.visit(Opcodes.V19, Opcodes.ACC_PUBLIC, "Main", null, "java/lang/Object", null);
@@ -83,16 +80,16 @@ public class CodeCreator {
 	}
 	
 	public String getCurName() {
-		return curName.peek();
+		return cc.internalName;
 	}
 	
 	
 	public void setCurGenType(ASTNode gen, String name) {
 		if (gen == null) {
-			curGenType = null;
+			cc.curGenType = null;
 			return;
 		}
-		curGenType = createGenType(gen, name);
+		cc.curGenType = createGenType(gen, name);
 	}
 	
 	public LinkedHashMap<String, String> createGenType(ASTNode gen, String name) {
@@ -199,7 +196,7 @@ public class CodeCreator {
 				if (results.Classes.get(getCurName()).canGeneric()) {
 					ret = replaceReturn(info.returnType.get(priority[0]), results.Classes.get(getCurName()).genType);
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
-						analy.Import(ImportFormat(ret));
+						analy.addToResults(ImportFormat(ret));
 					}
 					
 					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(getCurName()).genType), ret, info.AccessModifiers};
@@ -207,7 +204,7 @@ public class CodeCreator {
 				else {
 					ret = info.returnType.get(priority[0]);
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
-						analy.Import(ImportFormat(ret));
+						analy.addToResults(ImportFormat(ret));
 					}
 					return new String[] {info.args.get(priority[0]).toArgs(), ret, info.AccessModifiers};
 				}
@@ -215,7 +212,7 @@ public class CodeCreator {
 				
 			
 		}
-		System.out.println("damn daniel " + Methodname + "   " + curName + "   "+ Classname +"   "+ stacks.toString());
+		System.out.println("damn daniel " + Methodname + "   " + getCurName() + "   "+ Classname +"   "+ stacks.toString());
 		return null;
 	}
 	
@@ -357,14 +354,14 @@ public class CodeCreator {
 				if (results.Classes.get(getCurName()).canGeneric()) {
 					ret = replaceReturn(replaceReturn(info.returnType.get(priority[0]), results.Classes.get(getCurName()).genType), results.Classes.get(Classname).genType);
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
-						analy.Import(ImportFormat(ret));
+						analy.addToResults(ImportFormat(ret));
 					}
 					return new String[] {replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(getCurName()).genType) , results.Classes.get(Classname).genType), ret, info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0])), };
 				}
 				else {
 					ret = replaceReturn(info.returnType.get(priority[0]), results.Classes.get(Classname).genType);
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
-						analy.Import(ImportFormat(ret));
+						analy.addToResults(ImportFormat(ret));
 					}
 					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(Classname).genType), ret, info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0]))};
 				}
@@ -653,17 +650,9 @@ public class CodeCreator {
 		
 	}
 	
-	public String setCurName(String s) {
-		return curName.push(s);
-	}
-	
-	public String removeCurName() {
-		return curName.pop();
-	}
 	
 	public boolean newClass(ASTNode classnode) {
 		OtherClass = new ClassCreator(classnode.GetFirstNode().value, classnode.GetFirstNode().value, results.Classes.get(classnode.GetFirstNode().value));
-		setCurName(classnode.GetFirstNode().value);
 		results.Classes.get(getCurName());
 		cc = OtherClass;
 		ASTNode temp = classnode;
@@ -857,7 +846,6 @@ public class CodeCreator {
 		if (classM) {
 			OtherClass = cc;
 			cc = MainClass;
-			setCurName("Main");
 			results.Classes.get("Main");
 		
 			if (method) {
@@ -2865,9 +2853,9 @@ public class CodeCreator {
 			}
 			return stackTop();
 		case TokenState.GENFUN:
-			if (curGenType != null && node.Grab(TokenState.GENERIC).GetNodeSize() < 1) {
+			if (cc.curGenType != null && node.Grab(TokenState.GENERIC).GetNodeSize() < 1) {
 
-				curStack.push(new StackInfo(constWithGen(node, curGenType), mv.size()));
+				curStack.push(new StackInfo(constWithGen(node, cc.curGenType), mv.size()));
 			}
 			else {
 				
@@ -4739,8 +4727,8 @@ public class CodeCreator {
 		case TokenState.GENFUN:
 			//err
 			System.out.println("GENFUN");
-			if (curGenType != null && node.Grab(TokenState.GENERIC).GetNodeSize() < 1) {
-				curStack.push(new StackInfo(constWithGen(node, curGenType), mv.size()));
+			if (cc.curGenType != null && node.Grab(TokenState.GENERIC).GetNodeSize() < 1) {
+				curStack.push(new StackInfo(constWithGen(node, cc.curGenType), mv.size()));
 			}
 			else {
 				System.out.println("here?");
@@ -10072,7 +10060,7 @@ public class CodeCreator {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		removeCurName();
+		cc = null;
 	}
 	
 	public void runClass(String filename) {
@@ -10322,15 +10310,16 @@ public class CodeCreator {
 		return vars;
 	}
 
-	public void newSubClass(ASTNode tree) {
+	public void newInnerClass(ASTNode tree) {
 		String name = tree.GetFirstNode().value;
 		String fullname = cc.internalName + "$" + name;
+		cc.cw.visitInnerClass(fullname, cc.internalName, name, Opcodes.ACC_PUBLIC);
 		cc = new ClassCreator(fullname, cc.internalName, cc.classInfo.subClasses.get(name), cc);
 		
 		
 	}
 	
-	public void endSubClass() {
+	public void endInnerClass() {
 		cc.cw.visitEnd();
 		saveClass();
 		cc = cc.outer;

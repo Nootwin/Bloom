@@ -87,18 +87,18 @@ public class Generator {
 			else if (tree.GetNodeSize() > 0) {
 				if (create.getVar(tree.value) != null) {
 					if (create.getVar(tree.value) instanceof GenVarInfo) {
-						create.curGenType = ((GenVarInfo) create.getVar(tree.value)).InferredTypes;
+						create.cc.curGenType = ((GenVarInfo) create.getVar(tree.value)).InferredTypes;
 					}
 					create.evalE(tree.GetFirstNode(), create.getVar(tree.value).type);
 					create.storeVar(tree.value, tree);
-					create.curGenType = null;
+					create.cc.curGenType = null;
 				}
 				else {
 					create.evalE(tree.GetFirstNode());
 					create.newUnknownVar(tree.value);
 				}
 				
-				create.curGenType = null;
+				create.cc.curGenType = null;
 				
 			}
 			else if (create.isClass(tree.value)) {
@@ -144,7 +144,7 @@ public class Generator {
 					create.evalE(tree.GetNode(1), create.strToByte(tree.value) + create.genToString(tree.Grab(TokenState.GENERIC)));
 					create.newVar(tree.GetFirstNode().value, tree.value, tree.Grab(TokenState.GENERIC), tree.line);
 					
-					create.curGenType = null;
+					create.cc.curGenType = null;
 				}
 				else {
 					create.uninitnewVar(tree.GetFirstNode().value, tree.value, tree.line);

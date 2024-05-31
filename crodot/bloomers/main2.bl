@@ -1,16 +1,5 @@
-import "javax.swing.JFrame"
-import "javax.swing.JButton"
+have it so when a class is imported
 
-JFrame frame = JFrame()
+its put in a limbo state, where the system knows its new name and where to find it
 
-JButton button = JButton("click")
-
-button.setBounds(130,100,100, 40)
-
-frame.add(button)
-
-frame.setSize(400,500)
-
-frame.setLayout(null)
-
-frame.setVisible(true)
+but that it only fully imports when trying to be read.
