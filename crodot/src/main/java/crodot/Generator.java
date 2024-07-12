@@ -50,6 +50,8 @@ public class Generator {
 	}
 	
 	public void decision(ASTNode tree) {
+		ASTNode start;
+		
 
 		switch(tree.type) {
 		case TokenState.INCREMENT, TokenState.DECREMENT, TokenState.EQUIVALENCY:
@@ -121,10 +123,14 @@ public class Generator {
 			}
 			break;
 		case TokenState.SUBDEFINITION:
-			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			lineCheck(tree);
-			create.newSubClass(tree);
+			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
+			unClass = create.newInnerClass(tree);
 			indentObj.push("subclass");
+			start = tree.Grab(TokenState.START);
+			for (int i = 0; i < start.GetNodeSize(); i++) {
+				decision(start.GetNode(i));
+			}
             break;
 		case TokenState.DECLARATION:
 
@@ -157,7 +163,7 @@ public class Generator {
 		case TokenState.DEFINITION:
 			indentObj.push("class");
 			unClass = create.newClass(tree);
-			ASTNode start = tree.Grab(TokenState.START);
+			start = tree.Grab(TokenState.START);
 			for (int i = 0; i < start.GetNodeSize(); i++) {
 				decision(start.GetNode(i));
 			}
@@ -232,9 +238,12 @@ public class Generator {
 			create.Return(tree.GetFirstNode());
 			break;
 		case TokenState.END:
+			System.out.println("nenver" + indentObj.peek());
+			
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			switch(indentObj.pop()) {
 			case "class":
+				System.out.println("here");
 				unClass = create.closeClass();
 				create.saveClass();
 				break;
@@ -255,6 +264,12 @@ public class Generator {
 			case "while":
 				lineCheck(tree);
 				create.EndWhile(tree.prev.prev.GetFirstNode());
+				create.getVarManager().blast();
+				break;
+			case "subclass":
+				System.out.println("subclass");
+				lineCheck(tree);
+				create.endInnerClass();
 				create.getVarManager().blast();
 				break;
 			case "for":

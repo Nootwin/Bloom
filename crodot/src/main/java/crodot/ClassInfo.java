@@ -14,8 +14,8 @@ public class ClassInfo {
 	String AccessModifiers;
 	HashMap<String, MethodInfo> methods;
 	HashMap<String, FieldInfo> fields;
-	HashMap<String, ClassInfo> subClasses;
-	HashMap<String, String> localSubClassNames;
+	HashMap<String, ClassInfo> innerClasses;
+	HashMap<String, String> localInnerClassNames;
 	LinkedHashMap<String, String> genType;
 	
 	
@@ -24,8 +24,8 @@ public class ClassInfo {
 		construct = false;
 		methods = new HashMap<>();
 		fields = new HashMap<>();
-		subClasses = new HashMap<>();
-		localSubClassNames = new HashMap<>();
+		innerClasses = new HashMap<>();
+		localInnerClassNames = new HashMap<>();
 	}
 	
 	public void willGeneric() {

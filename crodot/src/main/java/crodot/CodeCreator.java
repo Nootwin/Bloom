@@ -158,7 +158,6 @@ public class CodeCreator {
 					tempPrio[0] = i;
 					flag = true;
 					for (int j = 0; j < stacks.size(); j++) {
-						System.out.println("TYPETYPE" + stacks.get(j).toString());
 						if ((indexOf = stacks.get(j).indexOf(info.args.get(i).get(j))) != -1) {
 						
 							tempPrio[j+1] = indexOf;
@@ -193,13 +192,13 @@ public class CodeCreator {
 			if (priority != null) {
 				addCastings(info.args.get(priority[0]), stacks);
 				String ret;
-				if (results.Classes.get(getCurName()).canGeneric()) {
-					ret = replaceReturn(info.returnType.get(priority[0]), results.Classes.get(getCurName()).genType);
+				if (getCurClass().canGeneric()) {
+					ret = replaceReturn(info.returnType.get(priority[0]), getCurClass().genType);
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
 						analy.addToResults(ImportFormat(ret));
 					}
 					
-					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(getCurName()).genType), ret, info.AccessModifiers};
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType), ret, info.AccessModifiers};
 				}
 				else {
 					ret = info.returnType.get(priority[0]);
@@ -223,7 +222,7 @@ public class CodeCreator {
 			mv.visitFieldInsn(Opcodes.PUTFIELD, name, eval.value, info.fields.get(eval.value).type);
 		}
 		else {
-			ClassInfo info = results.Classes.get(getCurName());
+			ClassInfo info = getCurClass();
 			mv.visitFieldInsn(Opcodes.PUTFIELD, getCurName(), eval.value, info.fields.get(eval.value).type);
 		}
 	}
@@ -351,12 +350,12 @@ public class CodeCreator {
 			if (priority != null) {
 				String ret;
 				addCastings(info.args.get(priority[0]), stacks);
-				if (results.Classes.get(getCurName()).canGeneric()) {
-					ret = replaceReturn(replaceReturn(info.returnType.get(priority[0]), results.Classes.get(getCurName()).genType), results.Classes.get(Classname).genType);
+				if (getCurClass().canGeneric()) {
+					ret = replaceReturn(replaceReturn(info.returnType.get(priority[0]), getCurClass().genType), results.Classes.get(Classname).genType);
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
 						analy.addToResults(ImportFormat(ret));
 					}
-					return new String[] {replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(getCurName()).genType) , results.Classes.get(Classname).genType), ret, info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0])), };
+					return new String[] {replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType) , results.Classes.get(Classname).genType), ret, info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0])), };
 				}
 				else {
 					ret = replaceReturn(info.returnType.get(priority[0]), results.Classes.get(Classname).genType);
@@ -393,7 +392,7 @@ public class CodeCreator {
 	}
 	
 	ClassInfo returnCurClassInfo() {
-		return results.Classes.get(getCurName());
+		return getCurClass();
 	}
 	
 	private ArrayList<String> getAllPossibleTypes(String str) {
@@ -462,7 +461,7 @@ public class CodeCreator {
 		case "Ljava/lang/Object;":
 			break;
 		default:
-			if (results.Classes.get(getCurName()).canGeneric() && results.Classes.get(getCurName()).genType.containsKey(str)) {
+			if (getCurClass().canGeneric() && getCurClass().genType.containsKey(str)) {
 				list.add(arrayPrefix + "Ljava/lang/Object;");
 				break;
 			}
@@ -569,8 +568,8 @@ public class CodeCreator {
 			}
 			if (priority != null) {
 				addCastings(info.args.get(priority[0]), stacks);
-				if (results.Classes.get(getCurName()).canGeneric()) {
-					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(getCurName()).genType), "V", "public"};
+				if (getCurClass().canGeneric()) {
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType), "V", "public"};
 				}
 				else {
 					return new String[] {info.args.get(priority[0]).toArgs(), "V", "public"};
@@ -629,9 +628,7 @@ public class CodeCreator {
 	public void pushStack(String val) {
 		curStack.push(new StackInfo(val));
 	}
-	public String getClassName() {
-		return getCurName();
-	}
+
 	public String getRangeStack(int i) {
 		StringBuilder build = new StringBuilder();
 		for (int j = 0; j < i; j++) {
@@ -653,14 +650,14 @@ public class CodeCreator {
 	
 	public boolean newClass(ASTNode classnode) {
 		OtherClass = new ClassCreator(classnode.GetFirstNode().value, classnode.GetFirstNode().value, results.Classes.get(classnode.GetFirstNode().value));
-		results.Classes.get(getCurName());
+		getCurClass();
 		cc = OtherClass;
 		ASTNode temp = classnode;
 		if ((temp = classnode.Grab(TokenState.CLASSMODIFIER)) != null) {
-			cc.cw.visit(Opcodes.V19, results.Classes.get(getCurName()).AccessOpcode, getCurName(), signatureWriterClass(classnode), IfImport(temp.value), null);
+			cc.cw.visit(Opcodes.V19, getCurClass().AccessOpcode, getCurName(), signatureWriterClass(classnode), IfImport(temp.value), null);
 		}
 		else {
-			cc.cw.visit(Opcodes.V19, results.Classes.get(getCurName()).AccessOpcode, getCurName(), signatureWriterClass(classnode), "java/lang/Object", null);
+			cc.cw.visit(Opcodes.V19, getCurClass().AccessOpcode, getCurName(), signatureWriterClass(classnode), "java/lang/Object", null);
 		}
 		
 		cc.cw.visitSource(sourceFile, null);
@@ -668,7 +665,7 @@ public class CodeCreator {
 	}
 	
 	public boolean closeClass() {
-		if (!results.Classes.get(getCurName()).construct) {
+		if (!getCurClass().construct) {
 			mv = new CrodotMethodVisitor(cc.cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null));
 			addDefaultstoConst(getCurName());
 			returnType = "V";
@@ -684,10 +681,29 @@ public class CodeCreator {
 		}
 		returnType = null;
 		mv.visitMaxs(0, 0);
-
+		
 		mv.visitEnd();
 		mv = null;
 		return true;
+	}
+	
+	public ClassInfo fetchClassInfo(String fullname) {
+		if (fullname.contains("$")) {
+			ClassInfo cur;
+			StringBuilder s = new StringBuilder(fullname);
+			int lastInd = s.indexOf("$");
+			cur = results.Classes.get(s.substring(0, lastInd));
+			while (lastInd != -1) {
+				s.delete(0, lastInd + 1);
+				lastInd = s.indexOf("$");
+				cur = cur.innerClasses.get(s.substring(0, lastInd));
+			}
+			return cur;
+			
+		}
+		else {
+			return results.Classes.get(fullname);
+		}
 	}
 	
 	public boolean newMethod(String methodName, ASTNode tree) {
@@ -696,28 +712,33 @@ public class CodeCreator {
 		String returnType = GenSuperClass(strToByte(tree.value));
 		this.returnType = returnType;
 		String signature = signatureWriterMethod(tree);
-		
-		if (!results.Classes.get(getCurName()).methods.get(methodName).AccessModifiers.contains("static")) {
+		System.out.println(getCurName() + methodName);
+		if (!getCurClass().methods.get(methodName).AccessModifiers.contains("static")) {
 			vars.add("this", new VarInfo("this" , getCurName(), 0));
 		}
 		ArgsList<String> args = fromNodetoArg(tree);
 		if (methodName.equals(getCurName())) {
-			mv = new CrodotMethodVisitor(cc.cw.visitMethod(results.Classes.get(getCurName()).methods.get(methodName).AccessOpcode, "<init>", args.toArgs() + "V", signature, null));
+			mv = new CrodotMethodVisitor(cc.cw.visitMethod(getCurClass().methods.get(methodName).AccessOpcode, "<init>", args.toArgs() + "V", signature, null));
 			addDefaultstoConst(getCurName());
-			results.Classes.get(getCurName()).construct = true;
+			getCurClass().construct = true;
 			this.returnType = "V";
 		}
 		else {
 			System.out.println("RIRIRI" + args.toArgs());
-			mv = new CrodotMethodVisitor(cc.cw.visitMethod(results.Classes.get(getCurName()).methods.get(methodName).AccessOpcode, methodName,  args.toArgs() + returnType, signature, null));
+			mv = new CrodotMethodVisitor(cc.cw.visitMethod(getCurClass().methods.get(methodName).AccessOpcode, methodName,  args.toArgs() + returnType, signature, null));
 		}
 		
 		labelList = new Stack<>();
 		return false;
 	}
 	
+	private ClassInfo getCurClass() {
+		return cc.classInfo;
+	}
+	
 	private String GenSuperClass(String strToByte) {
-		ClassInfo info = results.Classes.get(getCurName());
+		ClassInfo info = getCurClass();
+		System.out.println(info);
 		if (info.canGeneric() && info.genType.containsKey(strToByte)) {
 			return info.genType.get(strToByte);
 		}
@@ -742,7 +763,7 @@ public class CodeCreator {
 			return str;
 		}
 		if (str.contains("<")) {
-			return strToByteGeneric(str, null, results.Classes.get(getCurName()).genType);
+			return strToByteGeneric(str, null, getCurClass().genType);
 		}
 		else if (str.contains("[")) {
 			String rep = str.replace("[]", "");
@@ -750,7 +771,7 @@ public class CodeCreator {
 			for (int i = 0; i < str.chars().filter(ch -> ch == '[').count(); i++) {
 				build.append("[");
 			}
-			if (results.Classes.get(getCurName()).canGeneric() && results.Classes.get(getCurName()).genType.containsKey("T" + rep + ";")) {
+			if (getCurClass().canGeneric() && getCurClass().genType.containsKey("T" + rep + ";")) {
 				build.append("T");
 				build.append(rep);
 				build.append(";");
@@ -817,7 +838,7 @@ public class CodeCreator {
 			case "bool":
 				return "Z";
 			default:
-				if (results.Classes.get(getCurName()).canGeneric() && results.Classes.get(getCurName()).genType.containsKey("T" + str + ";")) {
+				if (getCurClass().canGeneric() && getCurClass().genType.containsKey("T" + str + ";")) {
 					return "T" + str + ";";
 				}
 				return 'L' + IfImport(str) + ';';
@@ -954,8 +975,8 @@ public class CodeCreator {
 			if (parent.GetNode(i).type == TokenState.GENERIC) {
 				break;
 			}
-			else if (results.Classes.get(getCurName()).canGeneric() && results.Classes.get(getCurName()).genType.containsKey("T" + parent.GetNode(i).value + ";")) {
-				build.add(temp = results.Classes.get(getCurName()).genType.get("T" + parent.GetNode(i).value + ";"));
+			else if (getCurClass().canGeneric() && getCurClass().genType.containsKey("T" + parent.GetNode(i).value + ";")) {
+				build.add(temp = getCurClass().genType.get("T" + parent.GetNode(i).value + ";"));
 			}
 			else {
 				build.add(temp = strToByte(parent.GetNode(i).value));
@@ -9082,8 +9103,8 @@ public class CodeCreator {
 				}
 				if (priority != null) {
 					addCastings(info.args.get(priority[0]), stacks);
-					if (results.Classes.get(getCurName()).canGeneric()) {
-						this.invokeSpecial("<init>", IfImport(tree.value), replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(getCurName()).genType) , results.Classes.get(type).genType) + "V");
+					if (getCurClass().canGeneric()) {
+						this.invokeSpecial("<init>", IfImport(tree.value), replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType) , results.Classes.get(type).genType) + "V");
 						return "L" + IfImport(tree.value) + genToString(tree.Grab(TokenState.GENERIC));
 					
 					}
@@ -10050,6 +10071,7 @@ public class CodeCreator {
 	public void saveClass() {
 		FileOutputStream out;
 		try {
+			System.out.println(getCurName());
 			out = new FileOutputStream(getCurName() + ".class");
 			out.write(cc.cw.toByteArray());
 			out.close();
@@ -10310,11 +10332,16 @@ public class CodeCreator {
 		return vars;
 	}
 
-	public void newInnerClass(ASTNode tree) {
+	public boolean newInnerClass(ASTNode tree) {
+		System.out.println("Herllo");
 		String name = tree.GetFirstNode().value;
 		String fullname = cc.internalName + "$" + name;
 		cc.cw.visitInnerClass(fullname, cc.internalName, name, Opcodes.ACC_PUBLIC);
-		cc = new ClassCreator(fullname, cc.internalName, cc.classInfo.subClasses.get(name), cc);
+		for (Entry<String, ClassInfo> i : cc.classInfo.innerClasses.entrySet()) {
+			System.out.println(i.getValue());
+		}
+		cc = new ClassCreator(name, fullname, cc.classInfo.innerClasses.get(fullname), cc);
+		return false;
 		
 		
 	}
