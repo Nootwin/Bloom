@@ -4,11 +4,6 @@ subclass fortnite {
 	}
 }
 
-if 4 > 5 {
-	print("5")
-}
-
-print("imhere")
 
 
 

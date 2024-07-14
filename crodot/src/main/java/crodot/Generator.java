@@ -270,7 +270,6 @@ public class Generator {
 				System.out.println("subclass");
 				lineCheck(tree);
 				create.endInnerClass();
-				create.getVarManager().blast();
 				break;
 			case "for":
 				lineCheck(tree);

@@ -10082,7 +10082,6 @@ public class CodeCreator {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		cc = null;
 	}
 	
 	public void runClass(String filename) {
@@ -10337,10 +10336,16 @@ public class CodeCreator {
 		String name = tree.GetFirstNode().value;
 		String fullname = cc.internalName + "$" + name;
 		cc.cw.visitInnerClass(fullname, cc.internalName, name, Opcodes.ACC_PUBLIC);
-		for (Entry<String, ClassInfo> i : cc.classInfo.innerClasses.entrySet()) {
-			System.out.println(i.getValue());
-		}
+		
 		cc = new ClassCreator(name, fullname, cc.classInfo.innerClasses.get(fullname), cc);
+		ASTNode temp;
+		if ((temp = tree.Grab(TokenState.CLASSMODIFIER)) != null) {
+			cc.cw.visit(Opcodes.V19, getCurClass().AccessOpcode, getCurName(), signatureWriterClass(tree), IfImport(temp.value), null);
+		}
+		else {
+			cc.cw.visit(Opcodes.V19, getCurClass().AccessOpcode, getCurName(), signatureWriterClass(tree), "java/lang/Object", null);
+		}
+		cc.cw.visitSource(sourceFile, null);
 		return false;
 		
 		
