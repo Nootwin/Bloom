@@ -497,8 +497,10 @@ public class Analyser {
 			else {
 				ininfo.parent = "java/lang/Object";
 			}
-			ininfo.methods.put(getCurClass(), new MethodInfo(getCurClass(), "V"));
-			ininfo.methods.get(getCurClass()).args.add(new ArgsList<String>());
+			
+			ininfo.methods.put(tree.GetNode(0).value, new MethodInfo(tree.GetNode(0).value, "V"));
+			ininfo.methods.get(tree.GetNode(0).value).args.add(new ArgsList<String>());
+
 			if ((temp = tree.Grab(TokenState.GENERIC)) != null) {
 				ininfo.willGeneric();
 				for (int i = 0; i < temp.GetNodeSize(); i++) {
@@ -522,7 +524,7 @@ public class Analyser {
 			}
 			popCurClass();
 			curClassInfo = prev;
-			
+
 			
 			break;
 			
@@ -593,6 +595,7 @@ public class Analyser {
 			}
 			curClassInfo.methods.put(getCurClass(), new MethodInfo(getCurClass(), "V"));
 			curClassInfo.methods.get(getCurClass()).args.add(new ArgsList<String>());
+			
 			if ((temp = tree.Grab(TokenState.GENERIC)) != null) {
 				curClassInfo.willGeneric();
 				for (int i = 0; i < temp.GetNodeSize(); i++) {
@@ -614,6 +617,7 @@ public class Analyser {
 			for (int i = 0; i < start.GetNodeSize(); i++) {
 				analyse1(start.GetNode(i));
 			}
+
 			popCurClass();
 			setCurClass("Main");
 			curClassInfo = results.Classes.get("Main");

@@ -520,6 +520,25 @@ public class CodeCreator {
 		}
 		
 	}
+	
+	private ClassInfo getClass(String simplename) {
+		if (cc.simpleName.equals(simplename)) {
+			return cc.classInfo;
+		}
+		else if (getCurClass().innerClasses.containsKey(getCurClass().localInnerClassNames.get(simplename))) {
+			return getCurClass().innerClasses.get(getCurClass().localInnerClassNames.get(simplename));
+		}
+		else if (results.Classes.containsKey(simplename)) {
+			return results.Classes.get(simplename);
+		}
+		else {
+			return null;
+		}
+		
+	}
+	
+	
+	
 	private String[] constructorDo(String Classname, ASTNode tree) {
 		int[] priority = null;
 		int[] tempPrio;
@@ -530,7 +549,9 @@ public class CodeCreator {
 		mv.visitInsn(Opcodes.DUP);
 		if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
 		size = curStack.size();
-		MethodInfo info = results.Classes.get(type).methods.get(type);
+		
+		MethodInfo info = getClass(type).methods.get(type);
+		System.out.println(info.args);
 		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
 		if ((!Objects.isNull(info))) {
 			for (int i = 0; i < info.args.size(); i++) {
@@ -9959,7 +9980,13 @@ public class CodeCreator {
 		else if (constructorCheck(longname)){
 
 			Methodinfo = constructorDo(longname, tree);
-			invokeSpecial("<init>", longname, Methodinfo[0] + Methodinfo[1]);
+			if (cc.classInfo.innerClasses.containsKey(cc.classInfo.localInnerClassNames.get(longname))) {
+				invokeSpecial("<init>", (cc.classInfo.localInnerClassNames.get(longname)), Methodinfo[0] + Methodinfo[1]);
+            }
+			else {
+				invokeSpecial("<init>", longname, Methodinfo[0] + Methodinfo[1]);
+			}
+			
 
 			
 			return strToByte(tree.value);
@@ -10021,6 +10048,9 @@ public class CodeCreator {
 
 	private boolean constructorCheck(String Classname) {
 		if (results.Classes.containsKey(Classname)) {
+			return true;
+		}
+		if (cc.classInfo.innerClasses.containsKey(cc.classInfo.localInnerClassNames.get(Classname))) {
 			return true;
 		}
 		return false;
@@ -10351,10 +10381,14 @@ public class CodeCreator {
 		
 	}
 	
-	public void endInnerClass() {
+	public boolean endInnerClass() {
 		cc.cw.visitEnd();
 		saveClass();
 		cc = cc.outer;
+		if (cc == null) {
+			return false;
+		}
+		return true;
 		
 	}
 

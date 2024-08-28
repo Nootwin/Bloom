@@ -4,6 +4,8 @@ subclass fortnite {
 	}
 }
 
+fortnite f = fortnite()
+
 
 
 

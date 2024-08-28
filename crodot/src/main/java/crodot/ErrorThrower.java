@@ -74,6 +74,7 @@ public class ErrorThrower {
 		System.exit(-1);
 	}
 	
+	
 	void UnknownIdentifierException(int lineNumber, String name) {
 		System.err.print("UnknownIdentifierException");
 		System.err.println(": \"" + name + "\" is not a defined variable or field");

@@ -51,6 +51,7 @@ public class Generator {
 	
 	public void decision(ASTNode tree) {
 		ASTNode start;
+		System.out.println(caller.TokenStateToString(tree.type));
 		
 
 		switch(tree.type) {
@@ -80,7 +81,7 @@ public class Generator {
 			create.evalE(tree);
 			break;
 		case TokenState.IDENTIFIER:
-			
+
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			lineCheck(tree);
 			if (!indentObj.isEmpty() && indentObj.peek().equals("class")) {
@@ -133,7 +134,9 @@ public class Generator {
 			}
             break;
 		case TokenState.DECLARATION:
-
+			lineCheck(tree);
+			System.out.println(unClass + " " + unMethod + " " + wanderingIf);
+			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			if (!indentObj.isEmpty() && indentObj.peek().equals("class")) {
 
 				create.newField(tree.GetFirstNode().value, tree.value, Opcodes.ACC_PUBLIC, tree);
@@ -269,7 +272,7 @@ public class Generator {
 			case "subclass":
 				System.out.println("subclass");
 				lineCheck(tree);
-				create.endInnerClass();
+				unClass = create.endInnerClass();
 				break;
 			case "for":
 				lineCheck(tree);
