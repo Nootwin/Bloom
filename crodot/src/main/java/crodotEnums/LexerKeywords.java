@@ -23,7 +23,7 @@ public class LexerKeywords {
 		s.put("bool", TokenState.DECLARATION);
 		s.put("void", TokenState.DECLARATION);
 		s.put("class", TokenState.DEFINITION);
-		s.put("subclass", TokenState.SUBDEFINITION);
+		s.put("innerclass", TokenState.SUBDEFINITION);
 		s.put("abstract", TokenState.ACCDEF);
 		s.put("interface", TokenState.DEFINITION);
 		s.put("null", TokenState.NULLVALUE);

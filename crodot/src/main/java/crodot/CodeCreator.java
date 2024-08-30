@@ -145,7 +145,7 @@ public class CodeCreator {
 		int[] tempPrio;
 		boolean flag;
 		int indexOf;
-		MethodInfo info = results.Classes.get(Classname).methods.get(Methodname);
+		MethodInfo info = getClass(Classname).methods.get(Methodname);
 		if (info == null) {
 			err.UnknownMethodException(LineNum, Methodname, Classname);
 		}
@@ -522,11 +522,13 @@ public class CodeCreator {
 	}
 	
 	private ClassInfo getClass(String simplename) {
+		ClassInfo c;
 		if (cc.simpleName.equals(simplename)) {
 			return cc.classInfo;
 		}
-		else if (getCurClass().innerClasses.containsKey(getCurClass().localInnerClassNames.get(simplename))) {
-			return getCurClass().innerClasses.get(getCurClass().localInnerClassNames.get(simplename));
+		else if ((c = getInnerClassOrNull(simplename)) != null) {
+			System.out.println("gucci");
+			return c;
 		}
 		else if (results.Classes.containsKey(simplename)) {
 			return results.Classes.get(simplename);
@@ -537,6 +539,42 @@ public class CodeCreator {
 		
 	}
 	
+	private String GetInnerClassTrueName(String strname) {
+		ClassInfo i = getCurClass();
+		String lastclass = strname;
+		while (!i.innerClasses.containsKey(i.localInnerClassNames.get(strname))) {
+			i = i.outerClass;
+			if (i == null) {
+				return strname;
+			}
+		}
+		
+		return i.localInnerClassNames.get(strname);
+		
+		
+		
+	}
+	
+	private ClassInfo getInnerClassOrNull(String strname) {
+		ClassInfo i = getCurClass();
+		System.out.println("innerclass " + strname + i.outerClass);
+		
+		String lastclass = strname;
+		while (!(i.innerClasses.containsKey(strname) || i.innerClasses.containsKey(i.localInnerClassNames.get(strname)))) {
+			i = i.outerClass;
+			if (i == null) {
+				System.out.println("null3");
+				return null;
+			}
+		}
+		
+		if (i.innerClasses.containsKey(strname)) {
+			return i.innerClasses.get(strname);
+		} else {
+			return i.innerClasses.get(i.localInnerClassNames.get(strname));
+		}
+	}
+	 
 	
 	
 	private String[] constructorDo(String Classname, ASTNode tree) {
@@ -545,7 +583,8 @@ public class CodeCreator {
 		boolean flag;
 		int indexOf;
 		String type = IfImport(Classname);
-		mv.visitTypeInsn(Opcodes.NEW, type);
+		ClassInfo cInfo = getClass(type);
+		mv.visitTypeInsn(Opcodes.NEW, cInfo.truename);
 		mv.visitInsn(Opcodes.DUP);
 		if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
 		size = curStack.size();
@@ -768,8 +807,9 @@ public class CodeCreator {
 
 	private void addDefaultstoConst(String Classname) {
 		mv.visitVarInsn(Opcodes.ALOAD, 0);
-	    mv.visitMethodInsn(Opcodes.INVOKESPECIAL, results.Classes.get(Classname).parent, "<init>", "()V", false);
-	    for (Map.Entry<String, FieldInfo> entry : results.Classes.get(Classname).fields.entrySet()) {
+		System.out.println(getClass(Classname));
+	    mv.visitMethodInsn(Opcodes.INVOKESPECIAL, getClass(Classname).parent, "<init>", "()V", false);
+	    for (Map.Entry<String, FieldInfo> entry : getClass(Classname).fields.entrySet()) {
 	    	if (entry.getValue().HasCroValue()) {
 	    		mv.visitVarInsn(Opcodes.ALOAD, 0);
 	    		evalE(entry.getValue().OwnerValue);
@@ -9953,6 +9993,7 @@ public class CodeCreator {
 			else {
 				genType = sigToHash(top);
 				top = stripToImport(top);
+				top = GetInnerClassTrueName(top);
 			}
 			size = curStack.size();
 			if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
@@ -10382,6 +10423,13 @@ public class CodeCreator {
 	}
 	
 	public boolean endInnerClass() {
+		if (!getCurClass().construct) {
+			mv = new CrodotMethodVisitor(cc.cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null));
+			System.out.println(getCurName());
+			addDefaultstoConst(getCurName());
+			returnType = "V";
+			closeMethod();
+		}
 		cc.cw.visitEnd();
 		saveClass();
 		cc = cc.outer;

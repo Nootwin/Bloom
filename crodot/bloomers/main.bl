@@ -1,10 +1,12 @@
-subclass fortnite {
+innerclass fortnite {
 	void prin() {
 		print("hu")
 	}
 }
 
 fortnite f = fortnite()
+
+f.prin()
 
 
 

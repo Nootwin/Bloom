@@ -7,6 +7,7 @@ import java.util.Set;
 
 
 public class ClassInfo {
+	String truename;
 	String parent;
 	ClassInfo outerClass;
 	boolean construct;

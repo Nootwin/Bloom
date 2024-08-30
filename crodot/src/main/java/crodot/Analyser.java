@@ -58,6 +58,7 @@ public class Analyser {
 		accessPackage("java.lang");
 		addToResults("java.io.PrintStream");
 		curClassInfo = results.Classes.get("Main");
+		curClassInfo.truename = "Main";
 		
 		File dir = new File(System.getProperty("user.dir") + "\\");
 		File[] directoryListing = dir.listFiles();
@@ -435,6 +436,8 @@ public class Analyser {
 			curClassInfo.innerClasses.put(getCurClass(), ininfo);
 			curClassInfo.localInnerClassNames.put(tree.GetFirstNode().value, getCurClass());
 			curClassInfo = ininfo;
+			curClassInfo.outerClass = prev;
+			curClassInfo.truename = getCurClass();
 			
 			if (accAlr) {
 				if (privacy == 0) {
@@ -531,6 +534,7 @@ public class Analyser {
 		case TokenState.DEFINITION:
 			popCurClass();
 			setCurClass(tree.GetFirstNode().value);
+			curClassInfo.truename = getCurClass();
 			results.Classes.put(getCurClass(), curClassInfo = new ClassInfo());
 			if (accAlr) {
 				if (privacy == 0) {
