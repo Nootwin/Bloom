@@ -62,7 +62,7 @@ public class CodeCreator {
 		this.sourceFile = sourceFile;
 		this.analy = analy;
 		
-		MainClass = new ClassCreator("Main", "Main", results.Classes.get("Main"));
+		MainClass = new ClassCreator("Main", "Main", getClass("Main"));
 		MainClass.cw.visit(Opcodes.V19, Opcodes.ACC_PUBLIC, "Main", null, "java/lang/Object", null);
 		MainClass.cw.visitSource(sourceFile, null);
 		
@@ -95,7 +95,7 @@ public class CodeCreator {
 	public LinkedHashMap<String, String> createGenType(ASTNode gen, String name) {
 		String type = IfImport(name.replace("[]", ""));
 		LinkedHashMap<String, String> map = new LinkedHashMap<>();;
-		ClassInfo info = results.Classes.get(type);
+		ClassInfo info = getClass(type);
 		Iterator<String> keys = info.genType.keySet().iterator();
 		//why getting called
 		for (int i = 0; i < info.genType.size(); i++) {
@@ -218,7 +218,7 @@ public class CodeCreator {
 	public void storeField(ASTNode eval, StackInfo parent) {
 		String name;
 		if (eval.prev.prev.type == TokenState.DOT) {
-			ClassInfo info = results.Classes.get(name = stripToImport(parent.type));
+			ClassInfo info = getClass(name = stripToImport(parent.type));
 			mv.visitFieldInsn(Opcodes.PUTFIELD, name, eval.value, info.fields.get(eval.value).type);
 		}
 		else {
@@ -281,7 +281,7 @@ public class CodeCreator {
 	
 
 	public String[] checkMethodvStack(String Methodname, String Classname, int size, LinkedHashMap<String, String> genTypeInfo, int lineNum) {
-		MethodInfo info = results.Classes.get(Classname).methods.get(Methodname);
+		MethodInfo info = getClass(Classname).methods.get(Methodname);
 		if (info == null) {
 			err.UnknownMethodException(lineNum, Methodname, Classname);
 		}
@@ -300,7 +300,7 @@ public class CodeCreator {
 					for (int j = 0; j < stacks.size(); j++) {
 						if (info.args.get(i).get(j).startsWith("T")) {
 							tempParam = info.args.get(i).get(j);
-							if (results.Classes.get(Classname).canGeneric() && (indexOf = stacks.get(j).indexOf(results.Classes.get(Classname).genType.get(tempParam))) == -1) {
+							if (getClass(Classname).canGeneric() && (indexOf = stacks.get(j).indexOf(getClass(Classname).genType.get(tempParam))) == -1) {
 								flag = false;
 								break;
 							}
@@ -351,18 +351,18 @@ public class CodeCreator {
 				String ret;
 				addCastings(info.args.get(priority[0]), stacks);
 				if (getCurClass().canGeneric()) {
-					ret = replaceReturn(replaceReturn(info.returnType.get(priority[0]), getCurClass().genType), results.Classes.get(Classname).genType);
+					ret = replaceReturn(replaceReturn(info.returnType.get(priority[0]), getCurClass().genType), getClass(Classname).genType);
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
 						analy.addToResults(ImportFormat(ret));
 					}
-					return new String[] {replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType) , results.Classes.get(Classname).genType), ret, info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0])), };
+					return new String[] {replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType) , getClass(Classname).genType), ret, info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0])), };
 				}
 				else {
-					ret = replaceReturn(info.returnType.get(priority[0]), results.Classes.get(Classname).genType);
+					ret = replaceReturn(info.returnType.get(priority[0]), getClass(Classname).genType);
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
 						analy.addToResults(ImportFormat(ret));
 					}
-					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(Classname).genType), ret, info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0]))};
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), getClass(Classname).genType), ret, info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0]))};
 				}
 			}
 				
@@ -523,14 +523,16 @@ public class CodeCreator {
 	
 	private ClassInfo getClass(String simplename) {
 		ClassInfo c;
-		if (cc.simpleName.equals(simplename)) {
-			return cc.classInfo;
+		if (cc != null) { 
+			if (cc.simpleName.equals(simplename)) {
+				return cc.classInfo;
+			}
+			else if ((c = getInnerClassOrNull(simplename)) != null) {
+				System.out.println("gucci");
+				return c;
+			}
 		}
-		else if ((c = getInnerClassOrNull(simplename)) != null) {
-			System.out.println("gucci");
-			return c;
-		}
-		else if (results.Classes.containsKey(simplename)) {
+		if (results.Classes.containsKey(simplename)) {
 			return results.Classes.get(simplename);
 		}
 		else {
@@ -643,7 +645,7 @@ public class CodeCreator {
 	}
 	
 	public int getMethodAccess(String Classname, String Methodname) {
-		switch(results.Classes.get(Classname).methods.get(Methodname).AccessModifiers) {
+		switch(getClass(Classname).methods.get(Methodname).AccessModifiers) {
 		case "private":
 			return Opcodes.ACC_PRIVATE;
 		case "static":
@@ -709,8 +711,7 @@ public class CodeCreator {
 	
 	
 	public boolean newClass(ASTNode classnode) {
-		OtherClass = new ClassCreator(classnode.GetFirstNode().value, classnode.GetFirstNode().value, results.Classes.get(classnode.GetFirstNode().value));
-		getCurClass();
+		OtherClass = new ClassCreator(classnode.GetFirstNode().value, classnode.GetFirstNode().value, getClass(classnode.GetFirstNode().value));
 		cc = OtherClass;
 		ASTNode temp = classnode;
 		if ((temp = classnode.Grab(TokenState.CLASSMODIFIER)) != null) {
@@ -728,6 +729,7 @@ public class CodeCreator {
 		if (!getCurClass().construct) {
 			mv = new CrodotMethodVisitor(cc.cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null));
 			addDefaultstoConst(getCurName());
+			System.out.println(getCurName());
 			returnType = "V";
 			closeMethod();
 		}
@@ -752,7 +754,7 @@ public class CodeCreator {
 			ClassInfo cur;
 			StringBuilder s = new StringBuilder(fullname);
 			int lastInd = s.indexOf("$");
-			cur = results.Classes.get(s.substring(0, lastInd));
+			cur = getClass(s.substring(0, lastInd));
 			while (lastInd != -1) {
 				s.delete(0, lastInd + 1);
 				lastInd = s.indexOf("$");
@@ -762,7 +764,7 @@ public class CodeCreator {
 			
 		}
 		else {
-			return results.Classes.get(fullname);
+			return getClass(fullname);
 		}
 	}
 	
@@ -807,7 +809,7 @@ public class CodeCreator {
 
 	private void addDefaultstoConst(String Classname) {
 		mv.visitVarInsn(Opcodes.ALOAD, 0);
-		System.out.println(getClass(Classname));
+		System.out.println(getClass(Classname).truename + "///");
 	    mv.visitMethodInsn(Opcodes.INVOKESPECIAL, getClass(Classname).parent, "<init>", "()V", false);
 	    for (Map.Entry<String, FieldInfo> entry : getClass(Classname).fields.entrySet()) {
 	    	if (entry.getValue().HasCroValue()) {
@@ -928,7 +930,7 @@ public class CodeCreator {
 		if (classM) {
 			OtherClass = cc;
 			cc = MainClass;
-			results.Classes.get("Main");
+			getClass("Main");
 		
 			if (method) {
 				mv =  MainMethod;
@@ -1233,19 +1235,19 @@ public class CodeCreator {
 					return "I";
 				}
 				else {
-					info = results.Classes.get(prev);
+					info = getClass(prev);
 				}
 			}
 			else {
-				info = results.Classes.get(prev = getCurName());
+				info = getClass(prev = getCurName());
 				mv.visitVarInsn(Opcodes.ALOAD, 0);
 				
 			}
+			FieldInfo field = info.getField(name);
+			if (field != null) {
 
-			if (info.fields.containsKey(name)) {
-
-				mv.visitFieldInsn(Opcodes.GETFIELD, prev, name, info.fields.get(name).type);
-				return add + info.fields.get(name).type;
+				mv.visitFieldInsn(Opcodes.GETFIELD, prev, name, field.type);
+				return add + field.type;
 				
 			}
 			else {
@@ -1294,10 +1296,10 @@ public class CodeCreator {
 			ClassInfo info;
 			String typeName;
 			if (node.prev.type == TokenState.DOT) {
-				info = results.Classes.get(typeName = stripToImport(curStack.pop().type));
+				info = getClass(typeName = stripToImport(curStack.pop().type));
 			}
 			else {
-				info = results.Classes.get(typeName = getCurName());
+				info = getClass(typeName = getCurName());
 				mv.insert(new CrodotVar(Opcodes.ALOAD, s.posInQueue), size);
 			}
 			
@@ -3052,10 +3054,10 @@ public class CodeCreator {
 		ClassInfo info;
 		if (type.equals("str")) {
 			type = "java/lang/String";
-			info = results.Classes.get("java/lang/String");
+			info = getClass("java/lang/String");
 		}
 		else {
-			info = results.Classes.get(type);
+			info = getClass(type);
 		}
 		
 		evalE(node.GetFirstNode());
@@ -3107,7 +3109,7 @@ public class CodeCreator {
 			parent = evalE(left.GetFirstNode());
 			curStack.pop();
 			String partype;
-			ClassInfo info = results.Classes.get(partype = stripToImport(parent));
+			ClassInfo info = getClass(partype = stripToImport(parent));
 			if (left.GetNode(1).type == TokenState.ARR) {
 				mv.visitFieldInsn(Opcodes.GETFIELD, partype, left.GetNode(1).value, info.fields.get(left.GetNode(1).value).type);
 				
@@ -9125,7 +9127,7 @@ public class CodeCreator {
 		mv.visitInsn(Opcodes.DUP);
 		if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
 		size = curStack.size();
-		MethodInfo info = results.Classes.get(type).methods.get(type);
+		MethodInfo info = getClass(type).methods.get(type);
 		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
 		if ((!Objects.isNull(info))) {
 			for (int i = 0; i < info.args.size(); i++) {
@@ -9165,12 +9167,12 @@ public class CodeCreator {
 				if (priority != null) {
 					addCastings(info.args.get(priority[0]), stacks);
 					if (getCurClass().canGeneric()) {
-						this.invokeSpecial("<init>", IfImport(tree.value), replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType) , results.Classes.get(type).genType) + "V");
+						this.invokeSpecial("<init>", IfImport(tree.value), replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType) , getClass(type).genType) + "V");
 						return "L" + IfImport(tree.value) + genToString(tree.Grab(TokenState.GENERIC));
 					
 					}
 					else {
-						this.invokeSpecial("<init>", IfImport(tree.value), replaceAll(info.args.get(priority[0]).toArgs(), results.Classes.get(type).genType) + "V");
+						this.invokeSpecial("<init>", IfImport(tree.value), replaceAll(info.args.get(priority[0]).toArgs(), getClass(type).genType) + "V");
 						//System.out.println("Hey + " + "L" + IfImport(tree.value) + genToString(tree.Grab(TokenState.GENERIC)));
 						return "L" + IfImport(tree.value) + genToString(tree.Grab(TokenState.GENERIC));
 					}
@@ -9233,7 +9235,7 @@ public class CodeCreator {
 				}
 				if (gen.GetNode(i).GetNodeSize() > 0) {
 					System.out.println(stripToImport(name));
-					b.insert(b.length()-1, typedGeneric(gen.GetNode(i).GetNode(0), results.Classes.get(stripToImport(name)).genType));
+					b.insert(b.length()-1, typedGeneric(gen.GetNode(i).GetNode(0), getClass(stripToImport(name)).genType));
 				}
 				break;
 			case TokenState.INFERRED:
@@ -9277,7 +9279,7 @@ public class CodeCreator {
 				
 				b.deleteCharAt(b.length()-1);
 				System.out.println(stripToImport(resultString.replace("[", "")));
-				b.append(typedGeneric(curGen, results.Classes.get(stripToImport(resultString.replace("[", ""))).genType));
+				b.append(typedGeneric(curGen, getClass(stripToImport(resultString.replace("[", ""))).genType));
 				b.append(";");
 				flag = true;
 			}
@@ -9291,7 +9293,7 @@ public class CodeCreator {
 
 			if ((curGen = methodCall.Grab(TokenState.GENERIC)) != null) {
 				b.setLength(b.length()-1);
-				b.append(typedGeneric(curGen, results.Classes.get(IfImport(methodCall.value)).genType));
+				b.append(typedGeneric(curGen, getClass(IfImport(methodCall.value)).genType));
 				b.append(";");
 			}
 			System.out.println(b.toString());
@@ -10052,7 +10054,7 @@ public class CodeCreator {
 		if (splitpoint < 0) return null;
 
 		
-		Iterator<String> gen = results.Classes.get(stack.substring(1, splitpoint)).genType.keySet().iterator();
+		Iterator<String> gen = getClass(stack.substring(1, splitpoint)).genType.keySet().iterator();
 		LinkedHashMap<String, String> returnee = new LinkedHashMap<>();
 		StringBuilder build = new StringBuilder();
 		int brackets = 0;
@@ -10434,9 +10436,9 @@ public class CodeCreator {
 		saveClass();
 		cc = cc.outer;
 		if (cc == null) {
-			return false;
+			return true;
 		}
-		return true;
+		return false;
 		
 	}
 

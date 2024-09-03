@@ -1,12 +1,11 @@
-innerclass fortnite {
-	void prin() {
-		print("hu")
+class Steven {
+	int x = 5
+	innerclass Stone {
+		int retX() {
+			return x
+		}
 	}
 }
-
-fortnite f = fortnite()
-
-f.prin()
 
 
 

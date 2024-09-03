@@ -41,4 +41,17 @@ public class ClassInfo {
 		if (genType != null) return true;
 		return false;
 	}
+	
+	public FieldInfo getField(String name) {
+		ClassInfo c = this;
+		while (c != null) {
+			FieldInfo f = c.fields.get(name);
+			if (f != null)
+				return f;
+			c = c.outerClass;
+		}
+		return null;
+	}
+	
+
 }
