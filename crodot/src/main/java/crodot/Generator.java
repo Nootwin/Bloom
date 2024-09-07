@@ -28,7 +28,7 @@ public class Generator {
 	}
 	
 	public void lineCheck(ASTNode tree) {
-		if (create.mv != null && tree.line > line) {
+		if (create.mc != null && tree.line > line) {
 			line = tree.line;
 			create.addLineNumber(tree.line);
 			
@@ -282,7 +282,7 @@ public class Generator {
 			}
 		}
 		create.ClearStack();
-		if (create.mv != null) create.mv.apply();
+		if (create.mc != null) create.mc.mv.apply();
 	}
 
 }
