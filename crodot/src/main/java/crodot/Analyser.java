@@ -534,8 +534,8 @@ public class Analyser {
 		case TokenState.DEFINITION:
 			popCurClass();
 			setCurClass(tree.GetFirstNode().value);
-			curClassInfo.truename = getCurClass();
 			results.Classes.put(getCurClass(), curClassInfo = new ClassInfo());
+			curClassInfo.truename = getCurClass();
 			if (accAlr) {
 				if (privacy == 0) {
 					switch(tree.value) {
@@ -818,12 +818,15 @@ public class Analyser {
 		String name = classID.replace('.', '/');
 		Class<?> id = getClassObject(classID);
 		
-		results.qNames.put(id.getSimpleName(), name);
-		if (results.Classes.containsKey(name)) {
-			return;
-		}
+		if (id != null) {
+			results.qNames.put(id.getSimpleName(), name);
+			if (results.Classes.containsKey(name)) {
+				return;
+			}
 		
-		results.Classes.put(name, Import(name, id));
+			results.Classes.put(name, Import(name, id));
+		}
+		return;
 		
 	}
 	public Class<?> getClassObject(String classID) {

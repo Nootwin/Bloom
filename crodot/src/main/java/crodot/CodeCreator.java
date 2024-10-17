@@ -584,6 +584,7 @@ public class CodeCreator {
 		int indexOf;
 		String type = IfImport(Classname);
 		ClassInfo cInfo = getClass(type);
+		System.out.println(cInfo.truename + "CINFO" + cInfo.toString() + type);
 		
 		mc.mv.visitTypeInsn(Opcodes.NEW, cInfo.truename);
 		mc.mv.visitInsn(Opcodes.DUP);
