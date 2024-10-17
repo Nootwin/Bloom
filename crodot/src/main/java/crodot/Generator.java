@@ -84,7 +84,7 @@ public class Generator {
 
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
 			lineCheck(tree);
-			if (!indentObj.isEmpty() && indentObj.peek().equals("class")) {
+			if (!indentObj.isEmpty() && (indentObj.peek().equals("class") || indentObj.peek().equals("subclass"))) {
 				create.newFieldUnkType(tree.value, Opcodes.ACC_PUBLIC, tree);
 			}
 			else if (tree.GetNodeSize() > 0) {
@@ -137,7 +137,7 @@ public class Generator {
 			lineCheck(tree);
 			System.out.println(unClass + " " + unMethod + " " + wanderingIf);
 			wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
-			if (!indentObj.isEmpty() && indentObj.peek().equals("class")) {
+			if (!indentObj.isEmpty() &&  (indentObj.peek().equals("class") || indentObj.peek().equals("subclass"))) {
 
 				create.newField(tree.GetFirstNode().value, tree.value, Opcodes.ACC_PUBLIC, tree);
 			}

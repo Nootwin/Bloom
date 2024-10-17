@@ -560,7 +560,6 @@ public class CodeCreator {
 		ClassInfo i = getCurClass();
 		System.out.println("innerclass " + strname + i.outerClass);
 		
-		String lastclass = strname;
 		while (!(i.innerClasses.containsKey(strname) || i.innerClasses.containsKey(i.localInnerClassNames.get(strname)))) {
 			i = i.outerClass;
 			if (i == null) {
@@ -585,6 +584,7 @@ public class CodeCreator {
 		int indexOf;
 		String type = IfImport(Classname);
 		ClassInfo cInfo = getClass(type);
+		
 		mc.mv.visitTypeInsn(Opcodes.NEW, cInfo.truename);
 		mc.mv.visitInsn(Opcodes.DUP);
 		if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
@@ -10435,7 +10435,7 @@ public class CodeCreator {
 		cc.cw.visitEnd();
 		saveClass();
 		cc = cc.outer;
-		if (cc == null) {
+		if (cc == null || cc == MainClass) {
 			return true;
 		}
 		return false;
