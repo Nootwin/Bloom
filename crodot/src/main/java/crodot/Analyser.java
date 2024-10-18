@@ -31,6 +31,7 @@ public class Analyser {
 	private boolean accAlr;
 	private ClassFetcher fetcher = new ClassFetcher();
 	private ClassInfo curClassInfo;
+	private int subcounter = 0;
 	
 	Analyser(ASTNode trees) {
 		this.trees = trees;
@@ -439,6 +440,14 @@ public class Analyser {
 			curClassInfo.outerClass = prev;
 			curClassInfo.truename = getCurClass();
 			
+			//might not need strtobyte
+			FieldInfo outeraccess = curClassInfo.fields.put("this$" + subcounter, new FieldInfo("this$" + subcounter, strToByte(prev.truename), null));
+			outeraccess.AccessModifiers = "final synthetic";
+			outeraccess.AccessOpcode = Opcodes.ACC_FINAL + Opcodes.ACC_SYNTHETIC;
+			
+			
+			subcounter++;
+			
 			if (accAlr) {
 				if (privacy == 0) {
 					switch(tree.value) {
@@ -527,6 +536,7 @@ public class Analyser {
 			}
 			popCurClass();
 			curClassInfo = prev;
+			subcounter--;
 
 			
 			break;

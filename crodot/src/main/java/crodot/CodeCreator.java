@@ -814,7 +814,13 @@ public class CodeCreator {
 		System.out.println(getClass(Classname).truename + "///");
 	    mc.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, getClass(Classname).parent, "<init>", "()V", false);
 	    for (Map.Entry<String, FieldInfo> entry : getClass(Classname).fields.entrySet()) {
-	    	if (entry.getValue().HasCroValue()) {
+	    	if (entry.getKey().startsWith("this$")) {
+	    		mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
+	    		mc.mv.visitVarInsn(Opcodes.ALOAD, 1);
+	    		mc.mv.visitFieldInsn(Opcodes.PUTFIELD, getCurName(), entry.getKey(), entry.getValue().type);
+	    		
+	    	}
+	    	else if (entry.getValue().HasCroValue()) {
 	    		mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
 	    		evalE(entry.getValue().OwnerValue);
 	    		popStack();
