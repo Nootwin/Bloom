@@ -442,6 +442,7 @@ public class Analyser {
 			
 			//might not need strtobyte
 			FieldInfo outeraccess = curClassInfo.fields.put("this$" + subcounter, new FieldInfo("this$" + subcounter, strToByte(prev.truename), null));
+			outeraccess = curClassInfo.fields.get("this$" + subcounter);
 			outeraccess.AccessModifiers = "final synthetic";
 			outeraccess.AccessOpcode = Opcodes.ACC_FINAL + Opcodes.ACC_SYNTHETIC;
 			

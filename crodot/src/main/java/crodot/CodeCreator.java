@@ -29,6 +29,8 @@ import crodotStates.TokenState;
 import javassist.bytecode.Opcode;
 
 
+
+
 public class CodeCreator {
 	private String sourceFile;
 	private ClassCreator OtherClass;
@@ -577,17 +579,24 @@ public class CodeCreator {
 	 
 	
 	
-	private String[] constructorDo(String Classname, ASTNode tree) {
+	private String[] constructorDo(String Classname, ASTNode tree, boolean myInnerClass) {
 		int[] priority = null;
 		int[] tempPrio;
 		boolean flag;
 		int indexOf;
+		String prefix = "";
 		String type = IfImport(Classname);
 		ClassInfo cInfo = getClass(type);
-		System.out.println(cInfo.truename + "CINFO" + cInfo.toString() + type);
+		
 		
 		mc.mv.visitTypeInsn(Opcodes.NEW, cInfo.truename);
 		mc.mv.visitInsn(Opcodes.DUP);
+		
+		
+		if (myInnerClass) {
+			mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
+			prefix = "L" + getCurName() + ";";
+		}
 		if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
 		size = curStack.size();
 		
@@ -631,10 +640,10 @@ public class CodeCreator {
 			if (priority != null) {
 				addCastings(info.args.get(priority[0]), stacks);
 				if (getCurClass().canGeneric()) {
-					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType), "V", "public"};
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(prefix), getCurClass().genType), "V", "public"};
 				}
 				else {
-					return new String[] {info.args.get(priority[0]).toArgs(), "V", "public"};
+					return new String[] {info.args.get(priority[0]).toArgs(prefix), "V", "public"};
 				}
 			}
 				
@@ -812,7 +821,8 @@ public class CodeCreator {
 	private void addDefaultstoConst(String Classname) {
 		mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
 		System.out.println(getClass(Classname).truename + "///");
-	    mc.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, getClass(Classname).parent, "<init>", "()V", false);
+		mc.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, getClass(Classname).parent, "<init>", "()V", false);
+	    
 	    for (Map.Entry<String, FieldInfo> entry : getClass(Classname).fields.entrySet()) {
 	    	if (entry.getKey().startsWith("this$")) {
 	    		mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
@@ -9994,6 +10004,7 @@ public class CodeCreator {
 	public String invokeEasy(ASTNode tree) {
 		String[] Methodinfo;
 		String longname = IfImport(tree.value);
+		boolean[] construct;
 		if (tree.prev.type == TokenState.DOT) {
 			LinkedHashMap<String, String> genType = null;
 			top = curStack.pop().type;
@@ -10028,9 +10039,8 @@ public class CodeCreator {
 			}
 			return Methodinfo[1];
 		}
-		else if (constructorCheck(longname)){
-
-			Methodinfo = constructorDo(longname, tree);
+		else if ((construct = constructorCheck(longname))[0]){
+			Methodinfo = constructorDo(longname, tree, construct[1]);
 			if (cc.classInfo.innerClasses.containsKey(cc.classInfo.localInnerClassNames.get(longname))) {
 				invokeSpecial("<init>", (cc.classInfo.localInnerClassNames.get(longname)), Methodinfo[0] + Methodinfo[1]);
             }
@@ -10097,14 +10107,14 @@ public class CodeCreator {
 		return returnee;
 	}
 
-	private boolean constructorCheck(String Classname) {
+	private boolean[] constructorCheck(String Classname) {
 		if (results.Classes.containsKey(Classname)) {
-			return true;
+			return new boolean[] {true, false};
 		}
 		if (cc.classInfo.innerClasses.containsKey(cc.classInfo.localInnerClassNames.get(Classname))) {
-			return true;
+			return new boolean[] {true, true};
 		}
-		return false;
+		return new boolean[] {false};
 	}
 
 	public void invokeSpecial(String name, String owner, String args) {
@@ -10433,7 +10443,7 @@ public class CodeCreator {
 	
 	public boolean endInnerClass() {
 		if (!getCurClass().construct) {
-			mc = new MethodCreator(getCurName(), "V", new CrodotMethodVisitor(cc.cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null)));
+			mc = new MethodCreator(getCurName(), "V", new CrodotMethodVisitor(cc.cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "(" + strToByte(cc.outer.internalName) + ")V", null, null)));
 			System.out.println(getCurName());
 			addDefaultstoConst(getCurName());
 			mc.returnType = "V";

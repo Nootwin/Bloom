@@ -16,5 +16,13 @@ public class ArgsList<T> extends LinkedList<T> {
 		return b.toString();
 	}
 	
+	public String toArgs(String prefix) {
+		StringBuilder b = new StringBuilder("(");
+		b.append(prefix);
+		b.append(this.toString());
+		b.append(')');
+		return b.toString();
+	}
+	
 	
 }
