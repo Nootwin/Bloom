@@ -913,6 +913,7 @@ public class Analyser {
 			args = new ArgsList<>();
 			genTypeMethod = null;
 		}
+		System.out.println(name);
 		for (Constructor<?> c : id.getConstructors()) {
 			if (!info.methods.containsKey(name)) {
 				info.methods.put(name, new MethodInfo(c.getName(), "V"));

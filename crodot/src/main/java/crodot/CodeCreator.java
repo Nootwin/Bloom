@@ -148,7 +148,10 @@ public class CodeCreator {
 		int indexOf;
 		MethodInfo info = getClass(Classname).methods.get(Methodname);
 		if (info == null) {
-			err.UnknownMethodException(LineNum, Methodname, Classname);
+			info = getClass(Classname).innerClasses.get(getClass(Classname).localInnerClassNames.get(Methodname)).methods.get("<init>");
+			if (info == null) {
+				err.UnknownMethodException(LineNum, Methodname, Classname);
+			}
 		}
 		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
 		//System.out.println("INVOKE" + stacks);

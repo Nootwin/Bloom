@@ -15,6 +15,8 @@ Miau m = Miau()
 
 print(m.yep())
 
+MiauTwo mm = m.MiauTwo()
+
 
 
 
