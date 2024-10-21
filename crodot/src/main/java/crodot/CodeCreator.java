@@ -148,10 +148,7 @@ public class CodeCreator {
 		int indexOf;
 		MethodInfo info = getClass(Classname).methods.get(Methodname);
 		if (info == null) {
-			info = getClass(Classname).innerClasses.get(getClass(Classname).localInnerClassNames.get(Methodname)).methods.get("<init>");
-			if (info == null) {
-				err.UnknownMethodException(LineNum, Methodname, Classname);
-			}
+			err.UnknownMethodException(LineNum, Methodname, Classname);
 		}
 		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
 		//System.out.println("INVOKE" + stacks);
@@ -10021,6 +10018,11 @@ public class CodeCreator {
 			}
 			size = curStack.size();
 			if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
+			if (getClass(top).innerClasses.get(getClass(top).localInnerClassNames.get(tree.value)) != null) {
+				Methodinfo = constructorDo(tree.value, tree, true);
+				invokeSpecial("<init>", (cc.classInfo.localInnerClassNames.get(longname)), Methodinfo[0] + Methodinfo[1]);
+				return strToByte(tree.value);
+			}
 			if (genType == null) {
 				Methodinfo = checkMethodvStack(tree.value, top, curStack.size()-size, tree.line);
 			}

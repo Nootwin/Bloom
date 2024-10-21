@@ -63,10 +63,14 @@ public class Analyser {
 		
 		File dir = new File(System.getProperty("user.dir") + "\\");
 		File[] directoryListing = dir.listFiles();
+		Queue<Class<?>> ids = new LinkedList<>();
 		for (File child : directoryListing) {
 			if (child.getName().endsWith(".class")) {
-				addToResults(child.getName().substring(0, child.getName().indexOf('.')));
+				ids.add(getClassObject(child.getName().substring(0, child.getName().indexOf('.'))));
 			}
+		}
+		while (!ids.isEmpty()) {
+			addToResults(ids.poll());
 		}
 		for (int i = 0; i < trees.GetNodeSize(); i++) {
 			analyse1(trees.GetNode(i));
@@ -828,6 +832,22 @@ public class Analyser {
 	public void addToResults(String classID) {
 		String name = classID.replace('.', '/');
 		Class<?> id = getClassObject(classID);
+		
+		if (id != null) {
+			results.qNames.put(id.getSimpleName(), name);
+			if (results.Classes.containsKey(name)) {
+				return;
+			}
+		
+			results.Classes.put(name, Import(name, id));
+		}
+		return;
+		
+	}
+	
+	public void addToResults(Class<?> id) {
+		String name = id.getCanonicalName();
+		System.out.println(name);
 		
 		if (id != null) {
 			results.qNames.put(id.getSimpleName(), name);
