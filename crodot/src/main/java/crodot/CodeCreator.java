@@ -10019,7 +10019,9 @@ public class CodeCreator {
 			size = curStack.size();
 			if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
 			if (getClass(top).innerClasses.get(getClass(top).localInnerClassNames.get(tree.value)) != null) {
-				Methodinfo = constructorDo(tree.value, tree, true);
+				System.out.println("InnerClass" + longname);
+				Methodinfo = constructorDo(longname, tree, true);
+				//gonna be a problem
 				invokeSpecial("<init>", (cc.classInfo.localInnerClassNames.get(longname)), Methodinfo[0] + Methodinfo[1]);
 				return strToByte(tree.value);
 			}
@@ -10046,10 +10048,11 @@ public class CodeCreator {
 		}
 		else if ((construct = constructorCheck(longname))[0]){
 			Methodinfo = constructorDo(longname, tree, construct[1]);
-			if (cc.classInfo.innerClasses.containsKey(cc.classInfo.localInnerClassNames.get(longname))) {
+			if (construct[1]) {
 				invokeSpecial("<init>", (cc.classInfo.localInnerClassNames.get(longname)), Methodinfo[0] + Methodinfo[1]);
             }
 			else {
+				
 				invokeSpecial("<init>", longname, Methodinfo[0] + Methodinfo[1]);
 			}
 			
