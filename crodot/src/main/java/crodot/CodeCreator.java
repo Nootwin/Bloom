@@ -191,7 +191,7 @@ public class CodeCreator {
 				}
 			}
 			if (priority != null) {
-				addCastings(info.args.get(priority[0]), stacks);
+				addCastings(info.args.get(priority[0]), stacks, 0);
 				String ret;
 				if (getCurClass().canGeneric()) {
 					ret = replaceReturn(info.returnType.get(priority[0]), getCurClass().genType);
@@ -238,9 +238,9 @@ public class CodeCreator {
 		}
 	}
 	
-	private void addCastings(ArgsList<String> argsList, ArrayList<ArrayList<String>> stacks) {
+	private void addCastings(ArgsList<String> argsList, ArrayList<ArrayList<String>> stacks, int startPos) {
 
-		for (int i = 0; i < argsList.size(); i++) {
+		for (int i = startPos; i < argsList.size(); i++) {
 			if (stacks.get(i).get(0).length() < 2 && argsList.get(i).length() > 1 && stacks.get(i).get(0) != argsList.get(i) ) {
 				castingsPrimitive(stacks.get(i).get(0), getAllRangeStackPos.get(i));
 
@@ -350,7 +350,7 @@ public class CodeCreator {
 			}
 			if (priority != null) {
 				String ret;
-				addCastings(info.args.get(priority[0]), stacks);
+				addCastings(info.args.get(priority[0]), stacks, 0);
 				if (getCurClass().canGeneric()) {
 					ret = replaceReturn(replaceReturn(info.returnType.get(priority[0]), getCurClass().genType), getClass(Classname).genType);
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
@@ -589,30 +589,42 @@ public class CodeCreator {
 		ClassInfo cInfo = getClass(type);
 		
 		
-		mc.mv.visitTypeInsn(Opcodes.NEW, cInfo.truename);
-		mc.mv.visitInsn(Opcodes.DUP);
+
+		System.out.println("constructorDo" + cInfo.truename);
 		
 		if (innerClass) {
 			if (myInnerClass) {
+				mc.mv.visitTypeInsn(Opcodes.NEW, cInfo.truename);
+				mc.mv.visitInsn(Opcodes.DUP);
 				mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
 			}
+			else {
+				mc.mv.visitTypeInsn(Opcodes.NEW, cInfo.truename);
+				mc.mv.visitInsn(Opcodes.DUP2);
+				mc.mv.visitInsn(Opcodes.SWAP);
+			}
 			startIndex = 1;
+		}
+		else {
+			mc.mv.visitTypeInsn(Opcodes.NEW, cInfo.truename);
+			mc.mv.visitInsn(Opcodes.DUP);
 		}
 		if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
 		size = curStack.size();
 		
 		MethodInfo info = getClass(type).methods.get(type);
+		System.out.println(getClass(type).methods.get(type));
 		System.out.println(info.args);
 		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
 		
 
 		if ((!Objects.isNull(info))) {
-			for (int i = startIndex; i < info.args.size(); i++) {
-				if (info.args.get(i).size() == stacks.size()) {
+			for (int i = 0; i < info.args.size(); i++) {
+				if (info.args.get(i).size()-startIndex == stacks.size()) {
 					tempPrio = new int[size+1];
 					tempPrio[0] = i;
 					flag = true;
-					for (int j = 0; j < stacks.size(); j++) {
+					for (int j = startIndex; j < stacks.size(); j++) {
 						if ((indexOf = stacks.get(j).indexOf(info.args.get(i).get(j))) != -1) {
 							tempPrio[j+1] = indexOf;
 						}
@@ -641,7 +653,7 @@ public class CodeCreator {
 				}
 			}
 			if (priority != null) {
-				addCastings(info.args.get(priority[0]), stacks);
+				addCastings(info.args.get(priority[0]), stacks, startIndex);
 				if (getCurClass().canGeneric()) {
 					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType), "V", "public"};
 				}
@@ -9188,7 +9200,7 @@ public class CodeCreator {
 					}
 				}
 				if (priority != null) {
-					addCastings(info.args.get(priority[0]), stacks);
+					addCastings(info.args.get(priority[0]), stacks, 0);
 					if (getCurClass().canGeneric()) {
 						this.invokeSpecial("<init>", IfImport(tree.value), replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType) , getClass(type).genType) + "V");
 						return "L" + IfImport(tree.value) + genToString(tree.Grab(TokenState.GENERIC));
@@ -10450,6 +10462,9 @@ public class CodeCreator {
 		else {
 			cc.cw.visit(Opcodes.V19, getCurClass().AccessOpcode, getCurName(), signatureWriterClass(tree), "java/lang/Object", null);
 		}
+		FieldInfo outerField = getClass(fullname).fields.get("<outer>");
+		//signatue
+		cc.cw.visitField(Opcodes.ACC_FINAL + Opcodes.ACC_SYNTHETIC, outerField.name, outerField.type, outerField.name, null).visitEnd();
 		cc.cw.visitSource(sourceFile, null);
 		return false;
 		

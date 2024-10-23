@@ -438,6 +438,7 @@ public class Analyser {
 			ClassInfo prev = curClassInfo;
 			ClassInfo ininfo = new ClassInfo();
 			setCurClass(getCurClass() + "$" + tree.GetFirstNode().value);
+			results.Classes.put(getCurClass(), ininfo);
 			curClassInfo.innerClasses.put(getCurClass(), ininfo);
 			curClassInfo.localInnerClassNames.put(tree.GetFirstNode().value, getCurClass());
 			curClassInfo = ininfo;
@@ -447,6 +448,7 @@ public class Analyser {
 			//might not need strtobyte
 			FieldInfo outeraccess = curClassInfo.fields.put("this$" + subcounter, new FieldInfo("this$" + subcounter, strToByte(prev.truename), null));
 			outeraccess = curClassInfo.fields.get("this$" + subcounter);
+			curClassInfo.fields.put("<outer>", outeraccess);
 			outeraccess.AccessModifiers = "final synthetic";
 			outeraccess.AccessOpcode = Opcodes.ACC_FINAL + Opcodes.ACC_SYNTHETIC;
 			
@@ -515,8 +517,9 @@ public class Analyser {
 				ininfo.parent = "java/lang/Object";
 			}
 			
-			ininfo.methods.put(tree.GetNode(0).value, new MethodInfo(tree.GetNode(0).value, "V"));
-			ininfo.methods.get(tree.GetNode(0).value).args.add(new ArgsList<String>());
+			ininfo.methods.put(getCurClass(), new MethodInfo(getCurClass(), "V"));
+			ininfo.methods.get(getCurClass()).args.add(new ArgsList<String>());
+			ininfo.methods.get(getCurClass()).args.getFirst().add("L" + prev.truename + ";");
 
 			if ((temp = tree.Grab(TokenState.GENERIC)) != null) {
 				ininfo.willGeneric();
