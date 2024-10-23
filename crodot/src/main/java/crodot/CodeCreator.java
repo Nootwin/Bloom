@@ -579,12 +579,12 @@ public class CodeCreator {
 	 
 	
 	
-	private String[] constructorDo(String Classname, ASTNode tree, boolean myInnerClass) {
+	private String[] constructorDo(String Classname, ASTNode tree, boolean innerClass, boolean myInnerClass) {
 		int[] priority = null;
 		int[] tempPrio;
 		boolean flag;
 		int indexOf;
-		String prefix = "";
+		int startIndex = 0;
 		String type = IfImport(Classname);
 		ClassInfo cInfo = getClass(type);
 		
@@ -592,10 +592,11 @@ public class CodeCreator {
 		mc.mv.visitTypeInsn(Opcodes.NEW, cInfo.truename);
 		mc.mv.visitInsn(Opcodes.DUP);
 		
-		
-		if (myInnerClass) {
-			mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
-			prefix = "L" + getCurName() + ";";
+		if (innerClass) {
+			if (myInnerClass) {
+				mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
+			}
+			startIndex = 1;
 		}
 		if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
 		size = curStack.size();
@@ -603,8 +604,10 @@ public class CodeCreator {
 		MethodInfo info = getClass(type).methods.get(type);
 		System.out.println(info.args);
 		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
+		
+
 		if ((!Objects.isNull(info))) {
-			for (int i = 0; i < info.args.size(); i++) {
+			for (int i = startIndex; i < info.args.size(); i++) {
 				if (info.args.get(i).size() == stacks.size()) {
 					tempPrio = new int[size+1];
 					tempPrio[0] = i;
@@ -640,17 +643,19 @@ public class CodeCreator {
 			if (priority != null) {
 				addCastings(info.args.get(priority[0]), stacks);
 				if (getCurClass().canGeneric()) {
-					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(prefix), getCurClass().genType), "V", "public"};
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType), "V", "public"};
 				}
 				else {
-					return new String[] {info.args.get(priority[0]).toArgs(prefix), "V", "public"};
+					return new String[] {info.args.get(priority[0]).toArgs(), "V", "public"};
 				}
 			}
 				
 			
 		}
 		
+		System.out.println("damn daniel");
 		return null;
+		
 	}
 	
 	public int getMethodAccess(String Classname, String Methodname) {
@@ -10019,10 +10024,11 @@ public class CodeCreator {
 			size = curStack.size();
 			if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
 			if (getClass(top).innerClasses.get(getClass(top).localInnerClassNames.get(tree.value)) != null) {
-				System.out.println("InnerClass" + longname);
-				Methodinfo = constructorDo(longname, tree, true);
+				System.out.println("InnerClass" + longname + top);
+				System.out.println(curStack);
+				Methodinfo = constructorDo(top + "$" + longname, tree, true, false);
 				//gonna be a problem
-				invokeSpecial("<init>", (cc.classInfo.localInnerClassNames.get(longname)), Methodinfo[0] + Methodinfo[1]);
+				invokeSpecial("<init>", top + "$" + longname, Methodinfo[0] + Methodinfo[1]);
 				return strToByte(tree.value);
 			}
 			if (genType == null) {
@@ -10047,12 +10053,13 @@ public class CodeCreator {
 			return Methodinfo[1];
 		}
 		else if ((construct = constructorCheck(longname))[0]){
-			Methodinfo = constructorDo(longname, tree, construct[1]);
+			
 			if (construct[1]) {
+				Methodinfo = constructorDo(cc.classInfo.localInnerClassNames.get(longname), tree, construct[1], true);
 				invokeSpecial("<init>", (cc.classInfo.localInnerClassNames.get(longname)), Methodinfo[0] + Methodinfo[1]);
             }
 			else {
-				
+				Methodinfo = constructorDo(longname, tree, construct[1], true);
 				invokeSpecial("<init>", longname, Methodinfo[0] + Methodinfo[1]);
 			}
 			
