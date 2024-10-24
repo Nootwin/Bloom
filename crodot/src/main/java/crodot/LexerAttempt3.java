@@ -154,7 +154,7 @@ public class LexerAttempt3 {
 			c = code.charAt(i);
 			switch(status) {
 			case LexerStatus.NULL:
-				if (Character.isLetter(c)) {
+				if (Character.isLetter(c) || c == '$') {
 					b.append(c);
 					status = LexerStatus.KEYWORD;
 				}
@@ -180,7 +180,7 @@ public class LexerAttempt3 {
 				}
 				break;
 			case LexerStatus.KEYWORD:
-				if (Character.isLetter(c)) {
+				if (Character.isLetter(c) || c == '$') {
 					b.append(c);
 				}
 				else if (Character.isDigit(c)) {
@@ -213,7 +213,7 @@ public class LexerAttempt3 {
 				}
 				break;
 			case LexerStatus.LETTERNUM:
-				if (Character.isLetter(c) || Character.isDigit(c)) {
+				if (Character.isLetter(c) || Character.isDigit(c) || c == '$') {
 					b.append(c);
 				}
 				else if (c == '"') {
@@ -244,7 +244,7 @@ public class LexerAttempt3 {
 				if (Character.isDigit(c) || c == '.') {
 					b.append(c);
 				}
-				else if (Character.isLetter(c) || c == '"' || c == '\'') {
+				else if (Character.isLetter(c) || c == '"' || c == '\'' || c == '$') {
 					//error
 				}
 				else if (!Character.isWhitespace(c)) {
@@ -266,7 +266,7 @@ public class LexerAttempt3 {
 				}
 				break;
 			case LexerStatus.SPECIAL:
-				if (Character.isLetter(c)) {
+				if (Character.isLetter(c) || c == '$') {
 					addSpecial(b.toString());
 					b.setLength(0);
 					b.append(c);

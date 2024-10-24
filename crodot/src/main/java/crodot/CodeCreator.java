@@ -595,13 +595,14 @@ public class CodeCreator {
 		if (innerClass) {
 			if (myInnerClass) {
 				mc.mv.visitTypeInsn(Opcodes.NEW, cInfo.truename);
+				
 				mc.mv.visitInsn(Opcodes.DUP);
 				mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
 			}
 			else {
 				mc.mv.visitTypeInsn(Opcodes.NEW, cInfo.truename);
-				mc.mv.visitInsn(Opcodes.DUP2);
 				mc.mv.visitInsn(Opcodes.SWAP);
+				mc.mv.visitInsn(Opcodes.DUP2);
 			}
 			startIndex = 1;
 		}
@@ -10049,13 +10050,14 @@ public class CodeCreator {
 			}
 			size = curStack.size();
 			if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
+			System.out.println(top);
 			if (getClass(top).innerClasses.get(getClass(top).localInnerClassNames.get(tree.value)) != null) {
 				System.out.println("InnerClass" + longname + top);
 				System.out.println(curStack);
 				Methodinfo = constructorDo(top + "$" + longname, tree, true, false);
 				//gonna be a problem
 				invokeSpecial("<init>", top + "$" + longname, Methodinfo[0] + Methodinfo[1]);
-				return strToByte(tree.value);
+				return strToByte(top + "$" + longname);
 			}
 			if (genType == null) {
 				Methodinfo = checkMethodvStack(tree.value, top, curStack.size()-size, tree.line);
@@ -10083,15 +10085,17 @@ public class CodeCreator {
 			if (construct[1]) {
 				Methodinfo = constructorDo(cc.classInfo.localInnerClassNames.get(longname), tree, construct[1], true);
 				invokeSpecial("<init>", (cc.classInfo.localInnerClassNames.get(longname)), Methodinfo[0] + Methodinfo[1]);
+				return strToByte(cc.classInfo.localInnerClassNames.get(longname));
             }
 			else {
 				Methodinfo = constructorDo(longname, tree, construct[1], true);
 				invokeSpecial("<init>", longname, Methodinfo[0] + Methodinfo[1]);
+				return strToByte(tree.value);
 			}
 			
 
 			
-			return strToByte(tree.value);
+			
 		}
 		else {
 			size = curStack.size();
