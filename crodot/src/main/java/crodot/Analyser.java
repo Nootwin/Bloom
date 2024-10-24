@@ -109,7 +109,7 @@ public class Analyser {
 				}
 				info.methods.get(name).args.add(args);
 			}
-			info.fields.put("length", new FieldInfo("length", "I"));
+			info.fields.put("length", new FieldInfo("length", "I", name));
 			info.fields.get("length").AccessModifiers = "public";
 				
 		} catch (ClassNotFoundException e) {
@@ -769,7 +769,7 @@ public class Analyser {
 		case TokenState.DECLARATION:
 				String name = tree.GetFirstNode().value;
 				if (tree.GetNodeSize() > 1) {
-					curClassInfo.fields.put(name, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), tree.GetNode(1)));
+					curClassInfo.fields.put(name, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), tree.GetNode(1), getCurClass()));
 				}
 				else {
 					curClassInfo.fields.put(name, new FieldInfo(tree.GetFirstNode().value, strToByte(tree.value), null));
@@ -963,7 +963,7 @@ public class Analyser {
 			args = new ArgsList<>();
 		}
 		for (Field f : id.getFields()) {
-			info.fields.put(f.getName(), new FieldInfo(f.getName(), strToByte(f.getGenericType().getTypeName())));
+			info.fields.put(f.getName(), new FieldInfo(f.getName(), strToByte(f.getGenericType().getTypeName()), name));
 			info.fields.get(f.getName()).AccessModifiers = Modifier.toString(f.getModifiers());
 		}	
 		for (Class<?> c : id.getClasses()) {

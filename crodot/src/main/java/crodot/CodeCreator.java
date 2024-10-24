@@ -1280,8 +1280,11 @@ public class CodeCreator {
 			}
 			FieldInfo field = info.getField(name);
 			if (field != null) {
-
-				mc.mv.visitFieldInsn(Opcodes.GETFIELD, prev, name, field.type);
+				System.out.println(field + "MWAHAHAHAHAHAHAHAHAHAH");
+				if (prev != field.ownername) {
+					backUpToOuterClass(prev, field.ownername);
+				}
+				mc.mv.visitFieldInsn(Opcodes.GETFIELD, field.ownername, name, field.type);
 				return add + field.type;
 				
 			}
@@ -1290,6 +1293,17 @@ public class CodeCreator {
 				return "<ARRDEF>";
 			}
 		}
+	}
+	
+	public void backUpToOuterClass(String cur, String target) {
+		ClassInfo info = getClass(cur);
+		do {
+			mc.mv.visitFieldInsn(Opcodes.GETFIELD, info.truename, info.fields.get("<outer>").name, info.fields.get("<outer>").type);
+			info = info.outerClass;
+			
+			
+			
+		} while (info.truename != target);
 	}
 	
 	void addLineNumber(int line) {
