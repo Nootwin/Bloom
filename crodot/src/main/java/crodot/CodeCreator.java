@@ -600,9 +600,10 @@ public class CodeCreator {
 				mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
 			}
 			else {
+				//might need work
 				mc.mv.visitTypeInsn(Opcodes.NEW, cInfo.truename);
-				mc.mv.visitInsn(Opcodes.SWAP);
 				mc.mv.visitInsn(Opcodes.DUP2);
+				mc.mv.visitInsn(Opcodes.SWAP);
 			}
 			startIndex = 1;
 		}
@@ -940,7 +941,8 @@ public class CodeCreator {
 				if (getCurClass().canGeneric() && getCurClass().genType.containsKey("T" + str + ";")) {
 					return "T" + str + ";";
 				}
-				return 'L' + IfImport(str) + ';';
+				
+				return 'L' + IfImport(GetInnerClassTrueName(str)) + ';';
 			}
 		}
 		
