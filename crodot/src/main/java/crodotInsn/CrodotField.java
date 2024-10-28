@@ -19,5 +19,9 @@ public class CrodotField extends CrodotCode {
 	public void upload(MethodVisitor mv) {
 		mv.visitFieldInsn(opcode, owner, name, descriptor);
 	}
+	
+	public String toString() {
+		return "FIELD " + opcode + " " + owner + " " + name + " " + descriptor;
+	}
 
 }

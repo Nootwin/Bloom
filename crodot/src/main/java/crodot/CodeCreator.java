@@ -805,7 +805,7 @@ public class CodeCreator {
 		String signature = signatureWriterMethod(tree);
 		System.out.println(getCurName() + methodName);
 		if (!getCurClass().methods.get(methodName).AccessModifiers.contains("static")) {
-			vars.add("this", new VarInfo("this" , getCurName(), 0));
+			vars.add("this", new VarInfo("this" , "L" + getCurName() + ";", 0));
 		}
 		ArgsList<String> args = fromNodetoArg(tree);
 		if (methodName.equals(getCurName())) {
@@ -2956,7 +2956,9 @@ public class CodeCreator {
 		case TokenState.CAST:
 			return Cast(node);
 		case TokenState.EQUIVALENCY:
-			if (node.value.equals("=") || node.prev.type != TokenState.CODE || node.prev.type != TokenState.START) {
+			System.out.println("EQUALS" + node.GetFirstNode());
+			if (node.value.equals("=") || (node.prev.type != TokenState.CODE && node.prev.type != TokenState.START)) {
+				
 				return curStack.push(new StackInfo(equalsInStatement(node, true), mc.mv.size())).type;
 			}
 			return equalsInStatement(node, false);
@@ -3125,43 +3127,94 @@ public class CodeCreator {
 		ASTNode right = node.GetNode(1);
 		switch(left.type) {
 		case TokenState.IDENTIFIER:
-			switch(node.value) {
-			case "+=":
-				setTo = Add(new StackInfo(loadVar(left.value, left), mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
-				break;
-			case "-=":
-				setTo = Sub(new StackInfo(loadVar(left.value, left), mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
-				break;
-			case "*=":
-				setTo = Mul(new StackInfo(loadVar(left.value, left), mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
-				break;
-			case "/=":
-				setTo = Div(new StackInfo(loadVar(left.value, left), mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
-				break;
-			case "%=":
-				setTo = Rem(new StackInfo(loadVar(left.value, left), mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
-				break;
-			default:
-				setTo = evalE(right);
-				break;
-			}
-			
-			
-			if (leave) {
-				if (setTo.equals("J") || setTo.equals("D")) {
-					mc.mv.visitInsn(Opcodes.DUP2);
-				} else {
-					mc.mv.visitInsn(Opcodes.DUP);
+			if (getVar(left.value) != null) {
+				switch(node.value) {
+				case "+=":
+					setTo = Add(new StackInfo(loadVar(left.value, left), mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
+					break;
+				case "-=":
+					setTo = Sub(new StackInfo(loadVar(left.value, left), mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
+					break;
+				case "*=":
+					setTo = Mul(new StackInfo(loadVar(left.value, left), mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
+					break;
+				case "/=":
+					setTo = Div(new StackInfo(loadVar(left.value, left), mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
+					break;
+				case "%=":
+					setTo = Rem(new StackInfo(loadVar(left.value, left), mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
+					break;
+				default:
+					setTo = evalE(right);
+					break;
 				}
+				
+				
+				if (leave) {
+					if (setTo.equals("J") || setTo.equals("D")) {
+						mc.mv.visitInsn(Opcodes.DUP2);
+					} else {
+						mc.mv.visitInsn(Opcodes.DUP);
+					}
+				}
+				storeVar(left.value, left);
+				
+				return getVarType(left.value);
 			}
-			storeVar(left.value, left);
-			
-			return vars.get(left.value).type;
+			else if (getCurClass().getField(left.value) != null) {
+				String type = getCurClass().fields.get(left.value).type;
+				mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
+				mc.mv.visitInsn(Opcodes.DUP);
+				switch(node.value) {
+				case "+=":
+					mc.mv.visitFieldInsn(Opcodes.GETFIELD, cc.internalName, left.value, type);
+					setTo = Add(new StackInfo(type, mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
+					break;
+				case "-=":
+					mc.mv.visitFieldInsn(Opcodes.GETFIELD, cc.internalName,  left.value, type);
+					setTo = Sub(new StackInfo(type, mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
+					break;
+				case "*=":
+					mc.mv.visitFieldInsn(Opcodes.GETFIELD, cc.internalName,  left.value, type);
+					setTo = Div(new StackInfo(type, mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
+					break;
+				case "/=":
+					mc.mv.visitFieldInsn(Opcodes.GETFIELD,  cc.internalName, left.value, type);
+					setTo = Mul(new StackInfo(type, mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
+					break;
+				case "%=":
+					mc.mv.visitFieldInsn(Opcodes.GETFIELD,  cc.internalName,  left.value, type);
+					setTo = Rem(new StackInfo(type, mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
+					break;
+				default:
+					setTo = evalE(right);
+					break;
+				}
+				castTopStackForVar(type, setTo, node.line);
+				if (leave) {
+					if (type.equals("J") || type.equals("D")) {
+						mc.mv.visitInsn(Opcodes.DUP2_X1);
+					} else {
+						mc.mv.visitInsn(Opcodes.DUP_X1);
+					}
+				}
+				
+				mc.mv.visitFieldInsn(Opcodes.PUTFIELD, cc.internalName,  left.value, type);
+				curStack.pop();
+				return type;
+			}  
+			else {
+				err.UnknownIdentifierException(node.line, left.value);
+			}
+
 		case TokenState.DOT:
 			parent = evalE(left.GetFirstNode());
+			System.out.println(parent + "IAMTHEPARENT");
 			curStack.pop();
 			String partype;
+			System.out.println(stripToImport(parent) + "IAMTHEPARENT");
 			ClassInfo info = getClass(partype = stripToImport(parent));
+			System.out.println(info + "IAMTHECHILD");
 			if (left.GetNode(1).type == TokenState.ARR) {
 				mc.mv.visitFieldInsn(Opcodes.GETFIELD, partype, left.GetNode(1).value, info.fields.get(left.GetNode(1).value).type);
 				
@@ -4817,6 +4870,16 @@ public class CodeCreator {
 		return vars.get(name);
 	}
 	
+	public String getVarType(String name) {
+		VarInfo var = vars.get(name);
+		if (var == null) {
+			return getCurClass().fields.get(name).type;
+		}
+		else  {
+			return var.type;
+		}
+	}
+	
 	public String evalE(ASTNode node, String TypeExpected) {
 
 		switch(node.type) {
@@ -4832,7 +4895,8 @@ public class CodeCreator {
 		case TokenState.CAST:
 			return Cast(node);
 		case TokenState.EQUIVALENCY:
-			if (node.value.equals("=") || node.prev.type != TokenState.CODE || node.prev.type != TokenState.START) {
+			if (node.value.equals("=") || (node.prev.type != TokenState.CODE && node.prev.type != TokenState.START)) {
+				
 				return curStack.push(new StackInfo(equalsInStatement(node, true), mc.mv.size())).type;
 			}
 			return equalsInStatement(node, false);

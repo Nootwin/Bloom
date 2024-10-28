@@ -1,23 +1,24 @@
-class Miau {
-	int brrr = 4
-	innerclass MiauTwo {
-		int returnIt() {
-			return brrr
+class Toblerone {
+	
+	int prrrr = 6
+	
+	innerclass Tokey {
+		int getPurrTwo() {
+			prrr += 1
+			return prrrr
 		}
 	}
-	int yep() {
-		MiauTwo mtwo = MiauTwo()
-		return mtwo.returnIt()
+	
+	int getPurrOne() {
+		prrrr += 1
+		return prrrr
 	}
 }
 
-Miau m = Miau()
 
-print(m.yep())
+toby = Toblerone()
 
-Miau$MiauTwo mm = m.MiauTwo()
-
-print(mm.returnIt())
+print(toby.getPurrOne())
 
 
 
