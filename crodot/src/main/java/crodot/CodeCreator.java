@@ -146,9 +146,23 @@ public class CodeCreator {
 		int[] tempPrio;
 		boolean flag;
 		int indexOf;
-		MethodInfo info = getClass(Classname).methods.get(Methodname);
+		MethodInfo info;
+		if (Classname.equals(getCurName())) {
+			
+			info = getCurClass().getMethod(Methodname);
+			if (info.ownername != getCurName()) {
+				backUpToOuterClass(getCurName(), info.ownername);
+			}
+			
+		}
+		else {
+			info = getClass(Classname).methods.get(Methodname);
+			
+		}
+		
 		if (info == null) {
 			err.UnknownMethodException(LineNum, Methodname, Classname);
+			
 		}
 		ArrayList<ArrayList<String>> stacks = getAllRangeStack(size);
 		//System.out.println("INVOKE" + stacks);
@@ -199,14 +213,14 @@ public class CodeCreator {
 						analy.addToResults(ImportFormat(ret));
 					}
 					
-					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType), ret, info.AccessModifiers};
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType), ret, info.AccessModifiers, info.ownername};
 				}
 				else {
 					ret = info.returnType.get(priority[0]);
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
 						analy.addToResults(ImportFormat(ret));
 					}
-					return new String[] {info.args.get(priority[0]).toArgs(), ret, info.AccessModifiers};
+					return new String[] {info.args.get(priority[0]).toArgs(), ret, info.AccessModifiers, info.ownername};
 				}
 			}
 				
@@ -356,14 +370,14 @@ public class CodeCreator {
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
 						analy.addToResults(ImportFormat(ret));
 					}
-					return new String[] {replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType) , getClass(Classname).genType), ret, info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0])), };
+					return new String[] {replaceAll(replaceAll(info.args.get(priority[0]).toArgs(), getCurClass().genType) , getClass(Classname).genType), ret, info.AccessModifiers, info.ownername, genTypeInfo.get(info.returnType.get(priority[0])), };
 				}
 				else {
 					ret = replaceReturn(info.returnType.get(priority[0]), getClass(Classname).genType);
 					if (ret.length() > 1 && !results.Classes.containsKey(stripToImport(ret))) {
 						analy.addToResults(ImportFormat(ret));
 					}
-					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), getClass(Classname).genType), ret, info.AccessModifiers, genTypeInfo.get(info.returnType.get(priority[0]))};
+					return new String[] {replaceAll(info.args.get(priority[0]).toArgs(), getClass(Classname).genType), ret, info.AccessModifiers, info.ownername, genTypeInfo.get(info.returnType.get(priority[0]))};
 				}
 			}
 				
@@ -3162,28 +3176,32 @@ public class CodeCreator {
 				return getVarType(left.value);
 			}
 			else if (getCurClass().getField(left.value) != null) {
-				String type = getCurClass().fields.get(left.value).type;
+				FieldInfo field = getCurClass().getField(left.value);
+				String type = field.type;
 				mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
+				if (cc.internalName != field.ownername) {
+					backUpToOuterClass(cc.internalName, field.ownername);
+				}
 				mc.mv.visitInsn(Opcodes.DUP);
 				switch(node.value) {
 				case "+=":
-					mc.mv.visitFieldInsn(Opcodes.GETFIELD, cc.internalName, left.value, type);
+					mc.mv.visitFieldInsn(Opcodes.GETFIELD, field.ownername, left.value, type);
 					setTo = Add(new StackInfo(type, mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
 					break;
 				case "-=":
-					mc.mv.visitFieldInsn(Opcodes.GETFIELD, cc.internalName,  left.value, type);
+					mc.mv.visitFieldInsn(Opcodes.GETFIELD, field.ownername,  left.value, type);
 					setTo = Sub(new StackInfo(type, mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
 					break;
 				case "*=":
-					mc.mv.visitFieldInsn(Opcodes.GETFIELD, cc.internalName,  left.value, type);
+					mc.mv.visitFieldInsn(Opcodes.GETFIELD, field.ownername,  left.value, type);
 					setTo = Div(new StackInfo(type, mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
 					break;
 				case "/=":
-					mc.mv.visitFieldInsn(Opcodes.GETFIELD,  cc.internalName, left.value, type);
+					mc.mv.visitFieldInsn(Opcodes.GETFIELD,  field.ownername, left.value, type);
 					setTo = Mul(new StackInfo(type, mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
 					break;
 				case "%=":
-					mc.mv.visitFieldInsn(Opcodes.GETFIELD,  cc.internalName,  left.value, type);
+					mc.mv.visitFieldInsn(Opcodes.GETFIELD,  field.ownername,  left.value, type);
 					setTo = Rem(new StackInfo(type, mc.mv.size()), new StackInfo(evalE(right), mc.mv.size()), node.line);
 					break;
 				default:
@@ -3199,7 +3217,7 @@ public class CodeCreator {
 					}
 				}
 				
-				mc.mv.visitFieldInsn(Opcodes.PUTFIELD, cc.internalName,  left.value, type);
+				mc.mv.visitFieldInsn(Opcodes.PUTFIELD, field.ownername,  left.value, type);
 				curStack.pop();
 				return type;
 			}  
@@ -10140,9 +10158,9 @@ public class CodeCreator {
 				invokePublic(tree.value, IfImport(top), desc);	
 			}
 
-			if (Methodinfo.length > 3 && Methodinfo[3] != null) {
-				mc.mv.visitTypeInsn(Opcodes.CHECKCAST, Methodinfo[3].substring(1, Methodinfo[3].length()-1));
-				return  Methodinfo[3];
+			if (Methodinfo.length > 4 && Methodinfo[4] != null) {
+				mc.mv.visitTypeInsn(Opcodes.CHECKCAST, Methodinfo[4].substring(1, Methodinfo[4].length()-1));
+				return  Methodinfo[4];
 			}
 			return Methodinfo[1];
 		}
@@ -10164,15 +10182,16 @@ public class CodeCreator {
 			
 		}
 		else {
+			mc.mv.visitVarInsn(Opcodes.ALOAD, 0);
 			size = curStack.size();
 			if (tree.GetNodeSize() > 0) evalE(tree.GetLastNode());
 			Methodinfo = checkMethodvStack(tree.value, getCurName(), curStack.size()-size, tree.line);
 			String desc = removeGenerics(Methodinfo[0]) + removeGenerics(Methodinfo[1]);
 			if (Methodinfo[2].contains("static")) {
-				invokeStatic(tree.value, getCurName(), desc);
+				invokeStatic(tree.value, Methodinfo[3], desc);
 			}
 			else {
-				invokePublic(tree.value, getCurName(), desc);
+				invokePublic(tree.value, Methodinfo[3], desc);
 			}
 
 			return Methodinfo[1];

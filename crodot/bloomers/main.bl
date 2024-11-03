@@ -4,8 +4,7 @@ class Toblerone {
 	
 	innerclass Tokey {
 		int getPurrTwo() {
-			prrr += 1
-			return prrrr
+			return getPurrOne()
 		}
 	}
 	
@@ -13,12 +12,17 @@ class Toblerone {
 		prrrr += 1
 		return prrrr
 	}
+	
+	int getTwo() {
+		return getPurrOne()
+	}
 }
 
 
 toby = Toblerone()
+toke = toby.Tokey()
 
-print(toby.getPurrOne())
+print(toke.getPurrTwo())
 
 
 

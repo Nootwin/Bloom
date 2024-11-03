@@ -700,6 +700,7 @@ public class Analyser {
 			if (getCurClass().equals("Main")) {
 				curClassInfo.methods.put(storage, new MethodInfo(tree.GetFirstNode().value, strToByte(tree.value)));
 				curClassInfo.methods.get(storage).args.add(fromNodetoArg(tree));
+				curClassInfo.methods.get(storage).ownername = "Main";
 				
 				curClassInfo.methods.get(storage).AccessModifiers = privacyString.append("static").toString();
 				curClassInfo.methods.get(storage).AccessOpcode = privacy + Opcodes.ACC_STATIC;
@@ -711,6 +712,7 @@ public class Analyser {
 			}
 			else if (getCurClass().equals(tree.GetFirstNode().value)) {
 				curClassInfo.methods.get(storage).args.add(fromNodetoArg(tree));
+				curClassInfo.methods.get(storage).ownername = getCurClass();
 				if (accAlr) {
 					if (privacy == 0) {
 						curClassInfo.methods.get(storage).AccessModifiers = "public";
@@ -738,6 +740,7 @@ public class Analyser {
 			else {
 				curClassInfo.methods.put(storage, new MethodInfo(tree.GetFirstNode().value, strToByte(tree.value)));
 				curClassInfo.methods.get(storage).args.add(fromNodetoArg(tree));
+				curClassInfo.methods.get(storage).ownername = getCurClass();
 				
 				if (accAlr) {
 					
@@ -887,6 +890,7 @@ public class Analyser {
 
 		}
 		for (Method m : id.getMethods()) {
+			
 			for (TypeVariable<?> type : m.getTypeParameters()) {
 				if (genTypeMethod == null) {
 					genTypeMethod = new HashMap<>();
@@ -896,6 +900,7 @@ public class Analyser {
 				
 			if (!info.methods.containsKey(m.getName())) {
 				info.methods.put(m.getName(), new MethodInfo(m.getName()));
+				info.methods.get(m.getName()).ownername = name;
 				info.methods.get(m.getName()).AccessModifiers = Modifier.toString(m.getModifiers());
 			}
 				

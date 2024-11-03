@@ -53,5 +53,16 @@ public class ClassInfo {
 		return null;
 	}
 	
+	public MethodInfo getMethod(String name) {
+		ClassInfo c = this;
+		while (c != null) {
+			MethodInfo m = c.methods.get(name);
+			if (m != null)
+				return m;
+			c = c.outerClass;
+		}
+		return null;
+	}
+	
 
 }
