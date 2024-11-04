@@ -54,7 +54,6 @@ public class Parser {
 		int sizemin1;
 		int brack = 0;
 		for (int i = start; i < end+1; i++) {
-			System.out.println("GENERICOPFOFIOFOIFO   " + code.get(i).value + "   " + caller.TokenStateToString(code.get(i).type));
 			if (code.get(i).type == TokenState.LEFTGENERIC) {
 				brack++;
 			}
@@ -64,7 +63,6 @@ public class Parser {
 			if (code.get(i).type == TokenState.SEPERATOR && brack == 0) {
 				high = i-1;
 				sizemin1 = high - low;
-				System.out.println(sizemin1 + "POWPOWPOW");
 				if (sizemin1 < 0) {
 
 				}
@@ -84,7 +82,6 @@ public class Parser {
 					}
 				}
 				else if (code.get(low).type == TokenState.IDENTIFIER) {
-					System.out.println("AMIHERE");
 					tree.SetNode(temp = new ASTNode(tree, TokenState.CLASSNAME, code.get(low).value, lineNum));
 					if (sizemin1 > 0) {
 						temp.SetNode(genericSolve(new ASTNode(temp, TokenState.GENERIC, "<>", lineNum), low+1, high-1));
@@ -98,7 +95,6 @@ public class Parser {
 			}
 		}
 		sizemin1 = end - low;
-		System.out.println(sizemin1 + "FAKEGHOST");
 		if (sizemin1 < 0) {
 			return tree;
 		}
@@ -139,11 +135,9 @@ public class Parser {
 		int bestUnit = -1;
 		brackets = 0;
 		
-		System.out.println("FORN T" + code.get(start+1).value);
 		for (int i = end; i > start; i--) {
 			if (brackets == 0) {
 				unit = po2.get(code.get(i).type);
-				System.out.println(code.get(i).value);
 				if (bestUnit == -1 || unit < bestUnit) {
 					
 					bestUnit = unit;
@@ -209,7 +203,6 @@ public class Parser {
 			if (place == end) {
 				tree.value = "E";
 				ASTNode temp = preSolve(new ASTNode(lineNum), start, end-1);
-				System.out.println(temp.value);
 				//ur gonna have to add to the dot or if no dot do smth else
 				if (temp.type == TokenState.DOT) {
 					ASTNode liltemp;
@@ -230,7 +223,6 @@ public class Parser {
 			else if (place == start+1) {
 				tree.value = "S";
 				ASTNode temp = preSolve(new ASTNode(lineNum), start+2, end);
-				System.out.println(temp.value);
 				//ur gonna have to add to the dot or if no dot do smth else
 				if (temp.type == TokenState.DOT) {
 					ASTNode liltemp;
@@ -254,8 +246,6 @@ public class Parser {
 //				tree.SetNode(temp2);
 			}
 			else {
-				System.out.println("ERROR" +  code.get(start+4).value +  code.get(end).value);
-				System.out.println("howtf");
 				System.exit(-1);
 			}
 			return tree;
@@ -281,7 +271,6 @@ public class Parser {
 			return postSolve(tree, start, end-1);
 		case TokenState.ARR:
 			brackets = 0;
-			System.out.println("postsolve");
 			for (int i = place+2; i < end+1; i++) {
 				if (code.get(i).type == TokenState.LEFTBRACE) {
 					brackets++;
@@ -322,7 +311,6 @@ public class Parser {
 			return tree;
 		}
 		for (int i = end; i > start; i--) {
-			System.out.println(code.get(i).value);
 			if (brackets == 0) {
 				unit = po2.get(code.get(i).type);
 				
@@ -396,12 +384,10 @@ public class Parser {
 			}
 		}
 		tree.type = code.get(place).type;
-		System.out.println("POSTSOLVE" + caller.TokenStateToString(code.get(place).type));
 		tree.value = code.get(place).value;
 		
 		switch (tree.type) {
 		case TokenState.CAST:
-			System.out.println("CAST" + code.get(place-1).value);
 			brackets = 0;
 			for (int i = place + 2; i < end + 1; i++) {
 				if (code.get(i).type == TokenState.LEFTCAST) {
@@ -436,7 +422,6 @@ public class Parser {
 			if (place == end) {
 				tree.value = "E";
 				ASTNode temp = preSolve(new ASTNode(lineNum), start, end-1);
-				System.out.println(temp.value);
 				//ur gonna have to add to the dot or if no dot do smth else
 				if (temp.type == TokenState.DOT) {
 					ASTNode liltemp;
@@ -457,7 +442,6 @@ public class Parser {
 			else if (place == start+1) {
 				tree.value = "S";
 				ASTNode temp = preSolve(new ASTNode(lineNum), start+2, end);
-				System.out.println(temp.value);
 				//ur gonna have to add to the dot or if no dot do smth else
 				if (temp.type == TokenState.DOT) {
 					ASTNode liltemp;
@@ -481,8 +465,6 @@ public class Parser {
 //				tree.SetNode(temp2);
 			}
 			else {
-				System.out.println("ERROR" +  code.get(start+4).value +  code.get(end).value);
-				System.out.println("howtf");
 				System.exit(-1);
 			}
 			return tree;
@@ -493,7 +475,6 @@ public class Parser {
 			brackets = 0;
 			int dis=0;
 			for (int i = place+2; i < end+1; i++) {
-				System.out.println("GENERIC" + code.get(i).value);
 				if (code.get(i).type == TokenState.LEFTGENERIC) {
 					brackets++;
 				}
@@ -511,7 +492,6 @@ public class Parser {
 				}
 				
 			}
-			System.out.println("GENERICDONE");
 			for (int i = dis+2; i < end+1; i++) {
 				if (code.get(i).type == TokenState.LEFTBRACKET) {
 					brackets++;
@@ -570,7 +550,6 @@ public class Parser {
 			return tree;
 		case TokenState.ARR:
 			brackets = 0;
-			System.out.println("postsolve");
 			for (int i = place+2; i < end+1; i++) {
 				if (code.get(i).type == TokenState.LEFTBRACE) {
 					brackets++;
@@ -613,7 +592,6 @@ public class Parser {
 	
 	
 	int decide(int p) {
-		System.out.println("DECIDE" + code.get(p).value + "    " + caller.TokenStateToString(code.get(p).type));
 		switch(code.get(p).type) {
 		case TokenState.SUBDEFINITION:
 			cur.SetNode(new ASTNode(cur, TokenState.SUBDEFINITION, code.get(p).value, lineNum));
@@ -631,7 +609,6 @@ public class Parser {
 			return decide(p);
 		case TokenState.INCREMENT:
 			for (int j = p+1; j < code.size(); j++) {
-				System.out.println("MEGATRON" + code.get(j).value);
 				if (code.get(j).type == TokenState.ENDOFLINE) {
 					cur.SetNode(preSolve(new ASTNode(cur, lineNum), p-1, j-1));
 					return j+1;
@@ -901,7 +878,6 @@ public class Parser {
 					else if (b == 0 && (code.get(j).type == TokenState.ENDOFLINE || code.get(j).type == TokenState.EQUIVALENCY)) {
 						cur.SetNode(preSolve(new ASTNode(cur, lineNum), p-1, j-1));
 						cur = cur.GetLastNode();
-						System.out.println(j);
 
 						return j;
 					}

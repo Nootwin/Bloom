@@ -198,7 +198,6 @@ public class caller {
 	public static void multiFileCompileDebug(String FolderLocation, String mainLocation, String name, String outputLoc ) {
 		CrodotFileReader fileReader = new CrodotFileReader(FolderLocation + mainLocation);
 		String file = fileReader.ReadFileToString();
-		System.out.println(file);
 		
 		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList(), name, outputLoc);
 		
@@ -223,7 +222,6 @@ public class caller {
 		AnaResults results = analy.start();
 		
 		//printhelpfulresults(results);
-		System.out.println("ANALY DONE");
 		Generator gen = new Generator(parsed, results, err, analy, name);
 		
 		gen.createSys(null);
@@ -232,7 +230,6 @@ public class caller {
 	public static void singleFileCompileDebug(String fileLocation, String name, String outputLoc) {
 		CrodotFileReader fileReader = new CrodotFileReader(fileLocation);
 		String file = fileReader.ReadFileToString();
-		System.out.println(file);
 		
 		ErrorThrower err = new ErrorThrower(fileReader.getLineNumbers(), fileReader.getContentList(), name, outputLoc);
 		

@@ -42,7 +42,6 @@ public class Analyser {
 	}
 
 	String getCurClass() {
-		System.out.println(curClass.peek() + "KWDODKWOD");
 		return curClass.peek();
 	}
 
@@ -524,8 +523,6 @@ public class Analyser {
 			if ((temp = tree.Grab(TokenState.GENERIC)) != null) {
 				ininfo.willGeneric();
 				for (int i = 0; i < temp.GetNodeSize(); i++) {
-					System.out.println(temp.GetNode(i).type);
-					System.out.println(temp.GetNode(i).value);
 					switch(temp.GetNode(i).type) {
 					case TokenState.CLASSNAME:
 						ininfo.genType.put("T" + temp.GetNode(i).value + ";", "Ljava/lang/Object;");
@@ -621,8 +618,6 @@ public class Analyser {
 			if ((temp = tree.Grab(TokenState.GENERIC)) != null) {
 				curClassInfo.willGeneric();
 				for (int i = 0; i < temp.GetNodeSize(); i++) {
-					System.out.println(temp.GetNode(i).type);
-					System.out.println(temp.GetNode(i).value);
 					switch(temp.GetNode(i).type) {
 					case TokenState.CLASSNAME:
 						curClassInfo.genType.put("T" + temp.GetNode(i).value + ";", "Ljava/lang/Object;");
@@ -646,7 +641,6 @@ public class Analyser {
 
 			break;
 		case TokenState.ACCESS:
-				System.out.println(tree.value);
 				switch(tree.value) {
 				case "local":
 					if (accAlr) {
@@ -660,12 +654,10 @@ public class Analyser {
 				case "priv":
 					if (accAlr) {
 						privacyString.append("private");
-						System.out.println("PRIVATE");
 						privacy += Opcodes.ACC_PRIVATE;
 						accAlr = false;
 					}
 					else {
-						System.out.println("ERROR");
 						//error
 					}
 					break;
@@ -745,7 +737,6 @@ public class Analyser {
 				if (accAlr) {
 					
 					if (privacy == 0) {
-						System.out.println(getCurClass() + "HEUHBUEBVYUEBG" + storage);
 						curClassInfo.methods.get(storage).AccessModifiers = "public";
 						curClassInfo.methods.get(storage).AccessOpcode = Opcodes.ACC_PUBLIC;
 					}
@@ -759,7 +750,6 @@ public class Analyser {
 					}
 				}
 				else {
-					System.out.println(privacyString.toString() + "    " + privacy + "    " + Opcodes.ACC_PRIVATE);
 					curClassInfo.methods.get(storage).AccessModifiers = privacyString.toString();
 					curClassInfo.methods.get(storage).AccessOpcode = privacy;
 					
@@ -853,7 +843,6 @@ public class Analyser {
 	
 	public void addToResults(Class<?> id) {
 		String name = id.getCanonicalName();
-		System.out.println(name);
 		
 		if (id != null) {
 			results.qNames.put(id.getSimpleName(), name);
@@ -910,7 +899,6 @@ public class Analyser {
 					args.add(strToByteGeneric(nameHolder, genTypeMethod, info.genType));
 				}
 				else if (genTypeMethod != null && genTypeMethod.containsKey(nameHolder)) {
-					System.out.println("IAMTHEONE");
 					args.add(genTypeMethod.get("L" + nameHolder + ";"));
 				}
 				else if (info.canGeneric() && info.genType.containsKey("T" + nameHolder + ";")) {
@@ -941,7 +929,6 @@ public class Analyser {
 			args = new ArgsList<>();
 			genTypeMethod = null;
 		}
-		System.out.println(name);
 		for (Constructor<?> c : id.getConstructors()) {
 			if (!info.methods.containsKey(name)) {
 				info.methods.put(name, new MethodInfo(c.getName(), "V"));
@@ -953,7 +940,6 @@ public class Analyser {
 					args.add(strToByteGeneric(nameHolder, genTypeMethod, info.genType));
 				}
 				else if (genTypeMethod != null && genTypeMethod.containsKey(nameHolder)) {
-					System.out.println("IAMTHEONE");
 					args.add(genTypeMethod.get("L" + nameHolder + ";"));
 				}
 				else if (info.canGeneric() && info.genType.containsKey("T" + nameHolder + ";")) {
@@ -1002,7 +988,6 @@ public class Analyser {
 		ArgsList<String> list = new ArgsList<>();
 		boolean skip = false;
 		for (int i = 1; i < parent.GetNodeSize()-1; i++) {
-			System.out.println("GUN" + parent.GetNode(i).value);
 			switch(parent.GetNode(i).value) {
 			case ",", "<>":
 				break;
@@ -1035,13 +1020,11 @@ public class Analyser {
 				skip = true;
 				break;
 			default:
-				System.out.println("Should not be ehre");
 				if (skip) {
 					skip = false;
 				}
 				else {
 					skip = true;
-					System.out.println(getCurClass());
 					if (!getCurClass().equals("Main") && curClassInfo.canGeneric() && curClassInfo.genType.containsKey("T" + parent.GetNode(i).value + ";")) {
 						list.add("T" + parent.GetNode(i).value + ';');
 					}

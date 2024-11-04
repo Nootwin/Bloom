@@ -24,6 +24,8 @@ toke = toby.Tokey()
 
 print(toke.getPurrTwo())
 
+when see name you dont know, you could just go through all your overbearing imports and look for it, idk will think bout, if works, would save a ton of work
+
 
 
 
