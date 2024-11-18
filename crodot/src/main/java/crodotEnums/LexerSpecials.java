@@ -25,6 +25,7 @@ public class LexerSpecials {
 		s.put("-", TokenState.SUB);
 		s.put("*", TokenState.MUL);
 		s.put("/", TokenState.DIV);
+		s.put("//", TokenState.COMMENT);
 		s.put("%", TokenState.REM);
 		s.put("^", TokenState.EXP);
 		s.put("++", TokenState.INCREMENT);

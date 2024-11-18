@@ -550,6 +550,9 @@ public class CodeCreator {
 		if (results.Classes.containsKey(simplename)) {
 			return results.Classes.get(simplename);
 		}
+		if ((c = results.addPotentialImportedClass(simplename)) != null) {
+			return c;
+		}
 		else {
 			return null;
 		}
@@ -10241,9 +10244,13 @@ public class CodeCreator {
 		if (results.Classes.containsKey(Classname)) {
 			return new boolean[] {true, false};
 		}
+		if (results.addPotentialImportedClass(Classname) != null) {
+			return new boolean[] { true, false };
+		}
 		if (cc.classInfo.innerClasses.containsKey(cc.classInfo.localInnerClassNames.get(Classname))) {
 			return new boolean[] {true, true};
 		}
+
 		return new boolean[] {false};
 	}
 

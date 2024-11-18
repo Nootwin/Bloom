@@ -1,34 +1,6 @@
-class Toblerone {
-	
-	int prrrr = 6
-	
-	innerclass Tokey {
-		int getPurrTwo() {
-			return getPurrOne()
-		}
-	}
-	
-	int getPurrOne() {
-		prrrr += 1
-		return prrrr
-	}
-	
-	int getTwo() {
-		return getPurrOne()
-	}
-}
+import "java.util.*"
 
-
-toby = Toblerone()
-toke = toby.Tokey()
-
-print(toke.getPurrTwo())
-
-when see name you dont know, you could just go through all your overbearing imports and look for it, idk will think bout, if works, would save a ton of work
-
-
-
-
+Date d = Date()
 
 
 

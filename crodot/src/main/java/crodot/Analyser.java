@@ -21,7 +21,7 @@ import crodotStates.TokenState;
 
 
 public class Analyser {
-	private AnaResults results = new AnaResults();
+	private AnaResults results = new AnaResults(this);
 	private Stack<String> curClass = new Stack<String>();
 	private ASTNode trees;
 	private String storage;
@@ -50,7 +50,7 @@ public class Analyser {
 	}
 	
 	public AnaResults start() {
-		results.Classes.put("Main", new ClassInfo());
+		results.Classes.put("Main", new ClassInfo(true));
 		results.Classes.get("Main").methods.put("main", new MethodInfo("main", "V"));
 		results.Classes.get("Main").methods.get("main").args.add(new ArgsList<String>());
 		results.Classes.get("Main").methods.get("main").args.getLast().add("[Ljava/lang/String;");
@@ -84,7 +84,7 @@ public class Analyser {
 			name = "[";
 			
 			
-			results.Classes.put(name, new ClassInfo());
+			results.Classes.put(name, new ClassInfo(true));
 			ClassInfo info = results.Classes.get(name);
 			for (Method m : id.getMethods()) {
 				if (!info.methods.containsKey(m.getName())) {
@@ -435,7 +435,7 @@ public class Analyser {
 			break;
 		case TokenState.SUBDEFINITION:
 			ClassInfo prev = curClassInfo;
-			ClassInfo ininfo = new ClassInfo();
+			ClassInfo ininfo = new ClassInfo(true);
 			setCurClass(getCurClass() + "$" + tree.GetFirstNode().value);
 			results.Classes.put(getCurClass(), ininfo);
 			curClassInfo.innerClasses.put(getCurClass(), ininfo);
@@ -549,7 +549,7 @@ public class Analyser {
 		case TokenState.DEFINITION:
 			popCurClass();
 			setCurClass(tree.GetFirstNode().value);
-			results.Classes.put(getCurClass(), curClassInfo = new ClassInfo());
+			results.Classes.put(getCurClass(), curClassInfo = new ClassInfo(true));
 			curClassInfo.truename = getCurClass();
 			if (accAlr) {
 				if (privacy == 0) {
@@ -793,37 +793,41 @@ public class Analyser {
 		}
 		
 	}
-
+	
 	private void accessPackage(String packageName) {
-		if (packageName.startsWith("java.")) {
-			File jars = new File("javart\\");
-			String shortname;
-			if (jars.exists()) {
-				try {
-					for (File file : jars.listFiles()) {
-						shortname = file.getName().substring(0, file.getName().length()-4);
-						if (shortname.equals(packageName)) {
-							BufferedReader read = new BufferedReader(new FileReader("javart\\" + file.getName()));
-							String line;
-							while((line = read.readLine()) != null) {
-								addToResults(shortname + "." + line);
-							}
-							read.close();
-						}
-					}
-				}
-				catch(IOException fnf) {
-					fnf.printStackTrace();
-				}
-			}
-			else {
-				System.out.println("error at import, Crodot lacks package data, Crodot java importer needs updating");
-			}
-		}
-		else {
-			//do stuff here
-		}
+		results.packageImports.add(packageName);
 	}
+
+//	private void accessPackage(String packageName) {
+//		if (packageName.startsWith("java.")) {
+//			File jars = new File("javart\\");
+//			String shortname;
+//			if (jars.exists()) {
+//				try {
+//					for (File file : jars.listFiles()) {
+//						shortname = file.getName().substring(0, file.getName().length()-4);
+//						if (shortname.equals(packageName)) {
+//							BufferedReader read = new BufferedReader(new FileReader("javart\\" + file.getName()));
+//							String line;
+//							while((line = read.readLine()) != null) {
+//								addToResults(shortname + "." + line);
+//							}
+//							read.close();
+//						}
+//					}
+//				}
+//				catch(IOException fnf) {
+//					fnf.printStackTrace();
+//				}
+//			}
+//			else {
+//				System.out.println("error at import, Crodot lacks package data, Crodot java importer needs updating");
+//			}
+//		}
+//		else {
+//			//do stuff here
+//		}
+//	}
 	
 	public void addToResults(String classID) {
 		String name = classID.replace('.', '/');
@@ -855,6 +859,8 @@ public class Analyser {
 		return;
 		
 	}
+	
+
 	public Class<?> getClassObject(String classID) {
 		try {
 			return Class.forName(classID);
@@ -869,7 +875,7 @@ public class Analyser {
 		ArgsList<String> args = new ArgsList<>();
 			
 		HashMap<String, String> genTypeMethod = null;
-		ClassInfo info = new ClassInfo();
+		ClassInfo info = new ClassInfo(true);
 			
 		for (TypeVariable<?> type : id.getTypeParameters()) {
 			if (!info.canGeneric()) {

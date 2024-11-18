@@ -7,6 +7,7 @@ import java.util.Set;
 
 
 public class ClassInfo {
+	boolean extracted;
 	String truename;
 	String parent;
 	ClassInfo outerClass;
@@ -21,7 +22,20 @@ public class ClassInfo {
 	
 	
 	
-	ClassInfo() {
+	ClassInfo(boolean extracted) {
+		this.extracted = extracted;
+		if (extracted) {
+			construct = false;
+			methods = new HashMap<>();
+			fields = new HashMap<>();
+			innerClasses = new HashMap<>();
+			localInnerClassNames = new HashMap<>();
+		}
+	}
+
+
+	public void extract() {
+		extracted = true;
 		construct = false;
 		methods = new HashMap<>();
 		fields = new HashMap<>();

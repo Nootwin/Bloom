@@ -19,6 +19,7 @@ public class LexerAttempt3 {
 	private ErrorThrower err;
 	private Queue<Integer> lineNum;
 	private int linePop;
+	private boolean comment = false;
 	
 	LexerAttempt3(String code, ErrorThrower err) {
 		this.code = code;
@@ -36,6 +37,7 @@ public class LexerAttempt3 {
 	public void addSpecial(String value) {
 		byte type;
 		if (specials.contains(value)) {
+			
 			tokens.add(new Token(type = specials.get(value), value));
 			if (type == TokenState.LESSTHAN) {
 				genCounter.add(tokens.size()-1);
@@ -48,6 +50,9 @@ public class LexerAttempt3 {
 					tokens.get(castCount.pop()).type = TokenState.LEFTCAST;
 					tokens.get(tokens.size()-1).type = TokenState.RIGHTCAST;
 				}
+			}
+			else if (type == TokenState.COMMENT) {
+				comment = true;
 			}
 			else if (type == TokenState.GREATERTHAN) {
 				if (!genCounter.isEmpty()) {
@@ -152,6 +157,7 @@ public class LexerAttempt3 {
 		byte status = LexerStatus.NULL;
 		for (int i = 0; i < code.length(); i++) {
 			c = code.charAt(i);
+			if (!comment) {
 			switch(status) {
 			case LexerStatus.NULL:
 				if (Character.isLetter(c) || c == '$') {
@@ -336,11 +342,13 @@ public class LexerAttempt3 {
 				}
 				break;
 			}
+			}
 			
 			while (!lineNum.isEmpty() && lineNum.peek() == i) {
 				lineNum.poll();
 				linePop++;
 				tokens.add(new Token(TokenState.NEXTLINE, ""));
+				comment = false;
 				castCount.clear();
 			}
 			

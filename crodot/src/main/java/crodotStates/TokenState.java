@@ -59,12 +59,14 @@ public class TokenState {
 	public static final byte IS = 54;
 	public static final byte NONE = 55;
 	public static final byte SUBDEFINITION = 56;
+	public static final byte COMMENT = 57;
 	
 	public static final byte INTEGER = 123;
 	public static final byte LONG = 124;
 	public static final byte DOUBLE = 125;
 	public static final byte NEXTLINE = 126;
 	public static final byte CODE = 127;
+	
 	
 	
 	
