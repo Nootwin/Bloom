@@ -1,6 +1,7 @@
 # Bloom
 <<<<<<< HEAD
-A programming language ive been developing, been in production since March 2023. uses Java Asm for JVM bytecode generation, utilizes the Jvm v.19 buildset for ratio realtime compilation and analysis. bleeding edge instruction fo-optimization to predict and forshadow the recuvise nature of the virtual heap utilizing deep-learning technologies
+Still in development
+
+A Programming language that uses the Java ASM bytecode instruction set. Fully compatible with all java code. Made to be simple to use while giving you the power of java
 =======
-A programming language ive been developing, been in production since March 2023 (Uploaded to Github in August). uses Java Asm for JVM bytecode generation
 >>>>>>> refs/remotes/origin/main
