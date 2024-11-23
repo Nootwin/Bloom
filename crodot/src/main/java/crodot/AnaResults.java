@@ -17,14 +17,15 @@ public class AnaResults {
 	ClassInfo addPotentialImportedClass(String simplename) {
 		for (int i = 0; i < packageImports.size(); i++) {
 			String pName = packageImports.get(i) + "." + simplename;
+			System.out.println("Checking: " + pName);
 			Class<?> mbClass = analyser.getClassObject(pName);
 			if (mbClass != null) {
-				analyser.addToResults(mbClass);
-				qNames.put(simplename, pName);
-				return Classes.get(pName);
+				return analyser.addToResults(mbClass);
 			}
 			
 		}
+		
+		System.out.println("No class found for: " + simplename);
 		
 		return null;
 	}

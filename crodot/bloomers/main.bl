@@ -2,5 +2,5 @@ import "java.util.*"
 
 Date d = Date()
 
-
+print(d)
 

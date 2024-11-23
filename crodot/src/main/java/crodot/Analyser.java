@@ -845,18 +845,20 @@ public class Analyser {
 		
 	}
 	
-	public void addToResults(Class<?> id) {
-		String name = id.getCanonicalName();
+	public ClassInfo addToResults(Class<?> id) {
+		String name = id.getCanonicalName().replace('.', '/');
+		ClassInfo info = new ClassInfo(true);
 		
 		if (id != null) {
 			results.qNames.put(id.getSimpleName(), name);
 			if (results.Classes.containsKey(name)) {
-				return;
+				return null;
 			}
 		
-			results.Classes.put(name, Import(name, id));
+			results.Classes.put(name, info = Import(name, id));
+			return info;
 		}
-		return;
+		return null;
 		
 	}
 	
@@ -876,6 +878,11 @@ public class Analyser {
 			
 		HashMap<String, String> genTypeMethod = null;
 		ClassInfo info = new ClassInfo(true);
+		
+		info.truename = name;
+		if (id.getEnclosingClass() != null) {
+			info.parent = id.getEnclosingClass().getCanonicalName().replace('.', '/');
+		}
 			
 		for (TypeVariable<?> type : id.getTypeParameters()) {
 			if (!info.canGeneric()) {
@@ -962,8 +969,9 @@ public class Analyser {
 		for (Field f : id.getFields()) {
 			info.fields.put(f.getName(), new FieldInfo(f.getName(), strToByte(f.getGenericType().getTypeName()), name));
 			info.fields.get(f.getName()).AccessModifiers = Modifier.toString(f.getModifiers());
-		}	
+		}
 		for (Class<?> c : id.getClasses()) {
+			//touchup
 			String name2 = c.getName().replace('.', '/');
 			info.localInnerClassNames.put(c.getSimpleName(), name2);
 			info.innerClasses.put(name2, Import(name2, c));

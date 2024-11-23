@@ -147,6 +147,8 @@ public class CodeCreator {
 		boolean flag;
 		int indexOf;
 		MethodInfo info;
+		
+		System.out.println("INVOKE" + Methodname + "   " + Classname);
 		if (Classname.equals(getCurName())) {
 			
 			info = getCurClass().getMethod(Methodname);
@@ -606,8 +608,9 @@ public class CodeCreator {
 		ClassInfo cInfo = getClass(type);
 		
 		
+		System.out.println("constructorDo" + cInfo.methods + type);
 
-		System.out.println("constructorDo" + cInfo.truename);
+		System.out.println("constructorDo" + cInfo.truename + type);
 		
 		if (innerClass) {
 			if (myInnerClass) {
@@ -10174,9 +10177,9 @@ public class CodeCreator {
 				invokeSpecial("<init>", (cc.classInfo.localInnerClassNames.get(longname)), Methodinfo[0] + Methodinfo[1]);
 				return strToByte(cc.classInfo.localInnerClassNames.get(longname));
             }
-			else {
+			else {  
 				Methodinfo = constructorDo(longname, tree, construct[1], true);
-				invokeSpecial("<init>", longname, Methodinfo[0] + Methodinfo[1]);
+				invokeSpecial("<init>", IfImport(longname), Methodinfo[0] + Methodinfo[1]);
 				return strToByte(tree.value);
 			}
 			
@@ -10245,12 +10248,13 @@ public class CodeCreator {
 			return new boolean[] {true, false};
 		}
 		if (results.addPotentialImportedClass(Classname) != null) {
+			
 			return new boolean[] { true, false };
 		}
 		if (cc.classInfo.innerClasses.containsKey(cc.classInfo.localInnerClassNames.get(Classname))) {
 			return new boolean[] {true, true};
 		}
-
+		
 		return new boolean[] {false};
 	}
 
