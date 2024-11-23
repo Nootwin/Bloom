@@ -1,5 +1,4 @@
 # Bloom
-<<<<<<< HEAD
 
 Still in development
 
