@@ -1,5 +1,1 @@
-have it so when a class is imported
 
-its put in a limbo state, where the system knows its new name and where to find it
-
-but that it only fully imports when trying to be read.

@@ -1997,7 +1997,7 @@ public class CodeCreator {
 		
 	}
 	
-	public void conditionalE(ASTNode node, Label label) {
+	public void conditionalE(ASTNode node, Label label, boolean reversal) {
 		evalE(node.GetFirstNode());
 		StackInfo s1 = curStack.pop();
 		evalE(node.GetNode(1));
@@ -2010,7 +2010,31 @@ public class CodeCreator {
 		else {
 			fType = s1.type;
 		}
-		switch(node.type) {
+		byte codeType = node.type;
+		if (reversal) {
+			switch (codeType) {
+			case TokenState.TRUEEQUALS:
+				codeType = TokenState.NOTEQUALS;
+				break;
+			case TokenState.NOTEQUALS:
+				codeType = TokenState.TRUEEQUALS;
+				break;
+			case TokenState.TRUEGREATERTHAN:
+				codeType = TokenState.LESSTHAN;
+				break;
+			case TokenState.TRUELESSTHAN:
+				codeType = TokenState.GREATERTHAN;
+				break;
+			case TokenState.GREATERTHAN:
+				codeType = TokenState.TRUELESSTHAN;
+				break;
+			case TokenState.LESSTHAN:
+				codeType = TokenState.TRUEGREATERTHAN;
+				break;
+			}
+		}
+		
+		switch(codeType) {
 		case TokenState.BOOLEAN:
 			if (node.value.equals("true")) {
 				mc.mv.visitLdcInsn(1);
@@ -2018,7 +2042,12 @@ public class CodeCreator {
 			else {
 				mc.mv.visitLdcInsn(0);
 			}
-			mc.mv.visitJumpInsn(Opcodes.IFEQ, label);
+			if (reversal) {
+				mc.mv.visitJumpInsn(Opcodes.IFNE, label);
+			}
+			else {
+				mc.mv.visitJumpInsn(Opcodes.IFEQ, label);
+			}
 			break;
 		case TokenState.TRUEEQUALS:
 			switch(fType) {
@@ -10060,7 +10089,7 @@ public class CodeCreator {
 		//its the labelList
 		labelList.add(new Label());
 		labelList.add(new Label());
-		IfconditionalE(tree, labelList.peek());
+		conditionalE(tree, labelList.peek(), false);
 	}
 	
 	public void Elif(ASTNode tree) {
@@ -10068,30 +10097,32 @@ public class CodeCreator {
 		mc.mv.visitJumpInsn(Opcodes.GOTO, labelList.peek());
 		labelList.add(new Label());
 		mc.mv.visitLabel(l); 
-		IfconditionalE(tree, labelList.peek());
+		conditionalE(tree, labelList.peek(), false);
 	}
 
 	public void Else() {
 		Label l = labelList.pop();
 		mc.mv.visitJumpInsn(Opcodes.GOTO, labelList.peek());
+		
 		mc.mv.visitLabel(l);
 	}
 	public void EndElse() {
 		mc.mv.visitLabel(labelList.pop());
 	}
 	public void EndOfIf() {
+		Label l = labelList.pop();
 		mc.mv.visitLabel(labelList.pop());
-		labelList.pop();
+		mc.mv.visitLabel(l);
 	}
 	
 	public void While(ASTNode tree) {
 		labelList.add(new Label());
 		labelList.add(new Label());
-		conditionalE(tree, labelList.peek());
+		conditionalE(tree, labelList.get(labelList.size()-2), false);
 		mc.mv.visitLabel(labelList.peek());
 	}
 	public void EndWhile(ASTNode tree) {
-		conditionalE(tree, labelList.pop());
+		conditionalE(tree, labelList.pop(), true);
 		mc.mv.visitJumpInsn(Opcodes.GOTO, labelList.peek());
 		mc.mv.visitLabel(labelList.pop());
 	}
@@ -10108,7 +10139,7 @@ public class CodeCreator {
 			evalE(tree.GetFirstNode().GetFirstNode());
 			newUnknownVar(tree.GetFirstNode().value);
 		}
-		conditionalE(tree.GetNode(1), labelList.peek());
+		conditionalE(tree.GetNode(1), labelList.get(labelList.size()-2), false);
 		mc.mv.visitLabel(labelList.peek());
 	}
 	public void EndFor(ASTNode tree) {
@@ -10119,7 +10150,7 @@ public class CodeCreator {
 		else {
 			storeVar(tree.GetFirstNode().value, tree);
 		}
-		conditionalE(tree.GetNode(1), labelList.pop());
+		conditionalE(tree.GetNode(1), labelList.pop(), true);
 		mc.mv.visitLabel(labelList.pop());
 	}
 	

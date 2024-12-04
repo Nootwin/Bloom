@@ -189,10 +189,12 @@ public class Generator {
 			break;
 		
 		case TokenState.CONDITIONAL:
-			wanderingIf = create.accMain(unClass, unMethod, false);
+			
 			lineCheck(tree);
-			create.getVarManager().createBlackPoint();
+			
 			if (tree.value.equals("if")) {
+				wanderingIf = create.accMain(unClass, unMethod, wanderingIf);
+				create.getVarManager().createBlackPoint();
 				create.If(tree.GetFirstNode());
 				indentObj.push("if");
 				for (int i = 0; i < tree.GetNode(1).GetNodeSize(); i++) {
@@ -200,6 +202,8 @@ public class Generator {
 				}
 			}
 			else if (tree.value.equals("elif")) {
+				wanderingIf = create.accMain(unClass, unMethod, false);
+				create.getVarManager().createBlackPoint();
 				create.Elif(tree.GetFirstNode());
 				indentObj.push("elif");
 				for (int i = 0; i < tree.GetNode(1).GetNodeSize(); i++) {
@@ -207,6 +211,8 @@ public class Generator {
 				}
 			}
 			else {
+				wanderingIf = create.accMain(unClass, unMethod, false);
+				create.getVarManager().createBlackPoint();
 				create.Else();
 				indentObj.push("else");
 				for (int i = 0; i < tree.GetFirstNode().GetNodeSize(); i++) {
