@@ -41,11 +41,13 @@ public class GenVarInfo extends VarInfo {
 	
 	public GenVarInfo AddGenerics(ASTNode genNode, AnaResults results, String parentClass) {
 		String classname = parentClass.replace("[]", ""); 
-
+		System.out.println("WHDUWIHDFUWHDFUWHFUWHFUW");
+		System.out.println(results.qNames);
 		if (results.qNames.containsKey(classname)) {
-			//System.out.println(classname + "PEWMNMMMM");
+			System.out.println(classname + "PEWMNMMMM");
 			classname = results.qNames.get(classname);
 		}
+
 		//System.out.println(classname);
 		ClassInfo info = results.Classes.get(classname);
 		Iterator<String> keys = info.genType.keySet().iterator();
@@ -83,6 +85,7 @@ public class GenVarInfo extends VarInfo {
 			//System.out.println(pClass + "KFIOEJFEI");
 			pClass = results.qNames.get(pClass);
 		}
+
 		//System.out.println("HEREHREREHER" + pClass);
 		if (results.Classes.get(pClass).canGeneric() && results.Classes.get(pClass).genType.containsKey(("T" + className.value + ";"))) {
 			sig.append("T");
@@ -95,7 +98,14 @@ public class GenVarInfo extends VarInfo {
 				sig.append(results.qNames.get(className.value));
 			}
 			else {
-				sig.append(className.value);
+				results.addPotentialImportedClass(className.value);
+				if (results.qNames.containsKey(className.value)) {
+					sig.append(results.qNames.get(className.value));
+				}
+				else {
+					sig.append(className.value);
+				}
+				
 			}
 			if (className.GetNodeSize() > 0) {
 				sig.append("<");
