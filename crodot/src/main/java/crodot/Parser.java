@@ -977,6 +977,7 @@ public class Parser {
 			lineNum++;
 			return p+1;
 		default :
+			System.out.println("Error: " + code.get(p).value + " " + code.get(p).type);
 			return -69;
 		
 		}

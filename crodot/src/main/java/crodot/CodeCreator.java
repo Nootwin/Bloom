@@ -1,10 +1,12 @@
 package crodot;
 
 import java.io.BufferedReader;
+import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -175,8 +177,9 @@ public class CodeCreator {
 					tempPrio[0] = i;
 					flag = true;
 					for (int j = 0; j < stacks.size(); j++) {
+						System.out.println("INVOKE" + stacks.get(j) + "   " + info.args.get(i).get(j));
 						if ((indexOf = stacks.get(j).indexOf(info.args.get(i).get(j))) != -1) {
-						
+							
 							tempPrio[j+1] = indexOf;
 						}
 						else if (stacks.get(j).get(0).equals("null") && info.args.get(i).get(j).length() > 1) {
@@ -980,6 +983,10 @@ public class CodeCreator {
 		if (results.qNames.containsKey(type)) {
 			return results.qNames.get(type);
 		}
+		else if (results.addPotentialImportedClass(type) != null) {
+            return results.qNames.get(type);
+        }
+  
 
 		return type;
 	}
@@ -9449,6 +9456,7 @@ public class CodeCreator {
 				b.deleteCharAt(b.length()-1);
 				System.out.println(stripToImport(resultString.replace("[", "")));
 				b.append(typedGeneric(curGen, getClass(stripToImport(resultString.replace("[", ""))).genType));
+				
 				b.append(";");
 				flag = true;
 			}
@@ -10354,13 +10362,14 @@ public class CodeCreator {
 			Process comm = Runtime.getRuntime().exec(cmd);
 			String line;
 			BufferedReader reader = new BufferedReader(new InputStreamReader(comm.getInputStream()));
-			System.out.println("**********");
+			//System.out.println("**********");
+			System.setOut(new PrintStream(new FileOutputStream(FileDescriptor.out)));
 			while ((line = reader.readLine()) != null) {
 				System.out.println(line);
 
 			}
 			reader.close();
-			System.out.println("**********");
+			//System.out.println("**********");
 			reader = new BufferedReader(new InputStreamReader(comm.getErrorStream()));
 			
 			while ((line = reader.readLine()) != null) {

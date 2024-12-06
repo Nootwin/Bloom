@@ -216,6 +216,7 @@ public class Analyser {
 				}
 				else {
 					r.append("L");
+					results.addPotentialImportedClass(temp);
 					r.append(IfImport(temp).replace('.', '/'));
 					r.append(";");
 				}
@@ -239,6 +240,8 @@ public class Analyser {
 				}
 				else {
 					r.append("L");
+					results.addPotentialImportedClass(temp);
+					System.out.println(temp + "WHJFHNBWUE");
 					r.append(IfImport(temp).replace('.', '/'));
 					r.append("<");
 				}
@@ -267,6 +270,7 @@ public class Analyser {
 				}
 				else {
 					r.append("L");
+					results.addPotentialImportedClass(temp);
 					r.append(IfImport(temp).replace('.', '/'));
 					r.append(";");
 					r.append(">");
@@ -319,7 +323,7 @@ public class Analyser {
 			case "void":
 				build.append("V");
 				break;
-			case "str":
+			case "str", "String":
 				build.append("Ljava/lang/String;");
 				break;
 			case "char":
@@ -348,6 +352,7 @@ public class Analyser {
 				break;
 			default:
 				build.append('L');
+				results.addPotentialImportedClass(str);
 				build.append(IfImport(str));
 				build.append(';');
 				break;
@@ -358,7 +363,7 @@ public class Analyser {
 			switch(str) {
 			case "void":
 				return "V";
-			case "str":
+			case "str", "String":
 				return "Ljava/lang/String;";
 			case "char":
 				return "C";
@@ -377,6 +382,7 @@ public class Analyser {
 			case "doub":
 				return "D";
 			default:
+				results.addPotentialImportedClass(str);
 				return 'L' + IfImport(str) + ';';
 			}
 		}

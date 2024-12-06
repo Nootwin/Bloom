@@ -157,6 +157,14 @@ public class LexerAttempt3 {
 		byte status = LexerStatus.NULL;
 		for (int i = 0; i < code.length(); i++) {
 			c = code.charAt(i);
+			
+			while (!lineNum.isEmpty() && lineNum.peek() == i) {
+				lineNum.poll();
+				linePop++;
+				tokens.add(new Token(TokenState.NEXTLINE, ""));
+				comment = false;
+				castCount.clear();
+			}
 			if (!comment) {
 			switch(status) {
 			case LexerStatus.NULL:
@@ -275,24 +283,45 @@ public class LexerAttempt3 {
 				if (Character.isLetter(c) || c == '$') {
 					addSpecial(b.toString());
 					b.setLength(0);
-					b.append(c);
-					status = LexerStatus.KEYWORD;
+					if (tokens.get(tokens.size() - 1).type == TokenState.COMMENT) {
+						status = LexerStatus.NULL;
+						tokens.remove(tokens.size()-1);
+					} else {
+						b.append(c);
+						status = LexerStatus.KEYWORD;
+					}
+					
 				}
 				else if (Character.isDigit(c)) {
 					addSpecial(b.toString());
 					b.setLength(0);
-					b.append(c);
-					status = LexerStatus.NUMBER;
+					if (tokens.get(tokens.size() - 1).type == TokenState.COMMENT) {
+						status = LexerStatus.NULL;
+						tokens.remove(tokens.size()-1);
+					} else {
+						b.append(c);
+						status = LexerStatus.NUMBER;
+					}
 				}
 				else if (c == '"') {
 					addSpecial(b.toString());
 					b.setLength(0);
-					status = LexerStatus.STRING;
+					if (tokens.get(tokens.size() - 1).type == TokenState.COMMENT) {
+						status = LexerStatus.NULL;
+						tokens.remove(tokens.size()-1);
+					} else {
+						status = LexerStatus.STRING;
+					}
 				}
 				else if (c == '\'') {
 					addSpecial(b.toString());
 					b.setLength(0);
-					status = LexerStatus.CHAR;
+					if (tokens.get(tokens.size() - 1).type == TokenState.COMMENT) {
+						status = LexerStatus.NULL;
+						tokens.remove(tokens.size()-1);
+					} else {
+						status = LexerStatus.CHAR;
+					}
 				}
 				else if (!Character.isWhitespace(c)) {
 					if (c != ';') {
@@ -309,6 +338,9 @@ public class LexerAttempt3 {
 					addSpecial(b.toString());
 					b.setLength(0);
 					status = LexerStatus.NULL;
+					if (tokens.get(tokens.size() - 1).type == TokenState.COMMENT) {
+						tokens.remove(tokens.size()-1);
+					}
 				}
 				break;
 			case LexerStatus.STRING:
@@ -344,13 +376,7 @@ public class LexerAttempt3 {
 			}
 			}
 			
-			while (!lineNum.isEmpty() && lineNum.peek() == i) {
-				lineNum.poll();
-				linePop++;
-				tokens.add(new Token(TokenState.NEXTLINE, ""));
-				comment = false;
-				castCount.clear();
-			}
+			
 			
 		}
 		
