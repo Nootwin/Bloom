@@ -38,7 +38,7 @@ public class LexerAttempt3 {
 		byte type;
 		if (specials.contains(value)) {
 			
-			tokens.add(new Token(type = specials.get(value), value));
+			tokens.add(new Token(type = specials.get(value), value, linePop));
 			if (type == TokenState.LESSTHAN) {
 				genCounter.add(tokens.size()-1);
 			}
@@ -101,7 +101,7 @@ public class LexerAttempt3 {
 		
 		if (words.contains(value)) {
 			Token t;
-			tokens.add(t = new Token(words.get(value), value));
+			tokens.add(t = new Token(words.get(value), value, linePop));
 			if (t.type == TokenState.CONDITIONAL && t.value.equals("if") && tokens.size() > 2) {
 				t = tokens.get(tokens.size()-2);
 				if (t.type == TokenState.CONDITIONAL && t.value.equals("else")) {
@@ -111,7 +111,7 @@ public class LexerAttempt3 {
 			}
 		}
 		else {
-			tokens.add(new Token(TokenState.IDENTIFIER, value));
+			tokens.add(new Token(TokenState.IDENTIFIER, value, linePop));
 			if (0 == genCounter.size()) {
 				int genBrack = 0;
 				
@@ -145,6 +145,9 @@ public class LexerAttempt3 {
 				
 					
 			}
+			else if (tokens.size() > 1 && tokens.get(tokens.size() - 2).type == TokenState.IDENTIFIER) {
+				tokens.get(tokens.size() - 2).type = TokenState.DECLARATION;
+			}
 			
 			
 			
@@ -161,7 +164,6 @@ public class LexerAttempt3 {
 			while (!lineNum.isEmpty() && lineNum.peek() == i) {
 				lineNum.poll();
 				linePop++;
-				tokens.add(new Token(TokenState.NEXTLINE, ""));
 				comment = false;
 				castCount.clear();
 			}
@@ -262,7 +264,7 @@ public class LexerAttempt3 {
 					//error
 				}
 				else if (!Character.isWhitespace(c)) {
-					tokens.add(new Token(TokenState.NUMBER, b.toString()));
+					tokens.add(new Token(TokenState.NUMBER, b.toString(), linePop));
 					b.setLength(0);
 					if (c != ';') {
 						b.append(c);
@@ -274,7 +276,7 @@ public class LexerAttempt3 {
 					}
 				}
 				else {
-					tokens.add(new Token(TokenState.NUMBER, b.toString()));
+					tokens.add(new Token(TokenState.NUMBER, b.toString(), linePop));
 					b.setLength(0);
 					status = LexerStatus.NULL;
 				}
@@ -351,7 +353,7 @@ public class LexerAttempt3 {
 					}
 				}
 				else {
-					tokens.add(new Token(TokenState.STRING, b.toString()));
+					tokens.add(new Token(TokenState.STRING, b.toString(), linePop));
 					b.setLength(0);
 					status = LexerStatus.NULL;
 					
@@ -368,7 +370,7 @@ public class LexerAttempt3 {
 					}
 				}
 				else {
-					tokens.add(new Token(TokenState.CHAR, b.toString()));
+					tokens.add(new Token(TokenState.CHAR, b.toString(), linePop));
 					b.setLength(0);
 					status = LexerStatus.NULL;
 				}

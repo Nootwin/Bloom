@@ -31,8 +31,19 @@ else {
 	print("This is what a ELSE looks like")
 }
 
-Object thisIsWhatAFunctionDeclarationLooksLike(String text) {
+String thisIsWhatAFunctionDeclarationLooksLike(String text) {
 	print(text)
+	return "This is What Returning Looks Like"
 }
 
 thisIsWhatAFunctionDeclarationLooksLike("This is What Calling a Function Looks like")
+
+class ThisIsWhatAClassLooksLike {
+	int ThisIsWhatAFieldLooksLike = 0
+
+	ThisIsWhatAClassLooksLike() {
+		print("This is what a CONSTRUCTOR Looks like")
+	}
+}
+
+z = ThisIsWhatAClassLooksLike()

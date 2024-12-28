@@ -592,6 +592,7 @@ public class Parser {
 	
 	
 	int decide(int p) {
+		lineNum = code.get(p).line;
 		switch(code.get(p).type) {
 		case TokenState.SUBDEFINITION:
 			cur.SetNode(new ASTNode(cur, TokenState.SUBDEFINITION, code.get(p).value, lineNum));
@@ -881,7 +882,7 @@ public class Parser {
 
 						return j;
 					}
-					else if (code.get(j).type == TokenState.LEFTCURLY) {
+					else if (b == 0 && code.get(j).type == TokenState.LEFTCURLY) {
 						cur.SetNode(new ASTNode(cur, TokenState.DESCRIPTION, code.get(p).value, lineNum));
 						cur.debugCheck();
 						cur = cur.GetLastNode();
@@ -915,6 +916,7 @@ public class Parser {
 									cur.SetLast(new ASTNode(cur, TokenState.START, ";", lineNum));
 									cur = cur.GetLastNode();
 								}
+								System.out.println("Returning " + code.get(i+1).value + " " + (i+1));
 								return i+1;
 							case TokenState.DECLARATION:
 								if (genIndex == 0) {
@@ -977,7 +979,7 @@ public class Parser {
 			lineNum++;
 			return p+1;
 		default :
-			System.out.println("Error: " + code.get(p).value + " " + code.get(p).type);
+			System.out.println("Error: " + code.get(p).value + " " + code.get(p).type + " " + p);
 			return -69;
 		
 		}
