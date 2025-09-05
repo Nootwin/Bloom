@@ -44,6 +44,11 @@ class ThisIsWhatAClassLooksLike {
 	ThisIsWhatAClassLooksLike() {
 		print("This is what a CONSTRUCTOR Looks like")
 	}
+	
+	void ThisIsWhatAMethodLooksLike() {
+		print("This is what a METHOD looks like")
+	}
 }
 
 z = ThisIsWhatAClassLooksLike()
+z.ThisIsWhatAMethodLooksLike()
